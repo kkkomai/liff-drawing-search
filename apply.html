@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>申請フォーム</title>
+  <script src="/sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; margin:0; padding:16px; background:#f5f5f5; }
+    .container { max-width: 480px; margin:0 auto; background:#fff; border-radius:12px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+    h1 { font-size:18px; margin:0 0 12px; color:#333; }
+    .tabs { display:flex; border-bottom:2px solid #e0e0e0; margin-bottom:16px; }
+    .tab { flex:1; padding:12px; text-align:center; font-size:14px; color:#666; background:none; border:none; cursor:pointer; }
+    .tab.active { color:#00b900; border-bottom:2px solid #00b900; font-weight:600; margin-bottom:-2px; }
+    .tab-content { display:none; }
+    .tab-content.active { display:block; }
+    .btn { width:100%; padding:14px; font-size:16px; border:none; border-radius:8px; cursor:pointer; }
+    .btn-primary { background:#00b900; color:#fff; }
+    .btn-secondary { background:#e0e0e0; color:#333; }
+    .hidden { display:none !important; }
+    .preview-wrap { margin-top:12px; text-align:center; }
+    .preview-wrap img { max-width:100%; border-radius:8px; border:2px solid #00b900; }
+    .debug-area { margin-top:16px; padding:12px; background:#1e1e1e; color:#0f0; font-family:monospace; font-size:11px; max-height:200px; overflow:auto; border-radius:8px; white-space:pre-wrap; word-break:break-all; }
+    .search-result { border:1px solid #ddd; border-radius:8px; padding:12px; margin-top:12px; }
+    .search-result img { max-width:100px; border-radius:4px; }
+    .search-result-item { display:flex; gap:12px; margin:8px 0; padding:8px; background:#fafafa; border-radius:6px; }
+    .search-result-info { flex:1; }
+    .search-result-name { font-weight:600; font-size:13px; }
+    .search-result-meta { font-size:11px; color:#666; }
+    #file-input { display:none; }
+    .canvas-wrap { position:relative; max-width:100%; margin:12px auto; }
+    .canvas-wrap canvas { max-width:100%; border-radius:8px; border:2px solid #00b900; }
+    .controls { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    .controls button { flex:1; min-width:80px; }
+    .radio-group { display:flex; gap:16px; margin:12px 0; font-size:14px; }
+    .radio-group label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>申請フォーム</h1>
+  
+  <div class="tabs">
+    <button class="tab active" data-tab="search">類似検索</button>
+    <button class="tab" data-tab="adjust">画像調整</button>
+  </div>
+
+  <!-- 類似検索タブ -->
+  <div class="tab-content active" id="tab-search">
+    <button class="btn btn-primary" id="search-btn" disabled>🔍 検索する</button>
+    <div class="preview-wrap hidden" id="search-preview-container">
+      <img id="search-preview-image" />
+    </div>
+    <div id="search-results"></div>
+  </div>
+
+  <!-- 画像調整タブ -->
+  <div class="tab-content" id="tab-adjust">
+    <div class="radio-group">
+      <label><input type="radio" name="aspect" value="4:3" checked> 4:3</label>
+      <label><input type="radio" name="aspect" value="3:4"> 3:4</label>
+    </div>
+    <button class="btn btn-secondary" id="pick-image-btn">📷 画像を選択</button>
+    <input type="file" id="file-input" accept="image/*" capture="environment" />
+    <div class="canvas-wrap hidden" id="canvas-wrap">
+      <canvas id="editor-canvas"></canvas>
+    </div>
+    <div class="controls">
+      <button class="btn btn-secondary" id="rotate-btn">↻ 90°回転</button>
+      <button class="btn btn-secondary" id="zoom-in-btn">🔍+ ズームイン</button>
+      <button class="btn btn-secondary" id="zoom-out-btn">🔍- ズームアウト</button>
+    </div>
+    <button class="btn btn-primary" id="apply-btn" style="margin-top:12px;">✅ 適用して類似検索へ</button>
+  </div>
+
+  <div class="debug-area" id="debug-log"></div>
+</div>
+
+<script>
+// ---- 共通ユーティリティ ----
+function log(msg, isError) {
+  const el = document.getElementById('debug-log');
+  if (el) {
+    const t = new Date().toLocaleTimeString();
+    el.textContent += '[' + t + '] ' + msg + '\n';
+    el.scrollTop = el.scrollHeight;
+  }
+  if (isError) console.error(msg); else console.log(msg);
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + name));
+  log('Tab switched: ' + name);
+}
+
+// ---- LIFF 初期化 ----
+let liffReady = false;
+async function initLiff() {
+  try {
+    await liff.init({ liffId: '2011376207-0e7oVWOT' });
+    liffReady = true;
+    log('LIFF initialized');
+  } catch (e) {
+    log('LIFF init failed: ' + e.message, true);
+  }
+}
+
+// ---- タブ切替 ----
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => showTab(btn.dataset.tab));
+});
+
+// ---- 画像エディター状態 ----
+let editorState = {
+  img: null,
+  canvas: document.getElementById('editor-canvas'),
+  ctx: null,
+  scale: 1,
+  offsetX: 0,
+  offsetY: 0,
+  aspect: '4:3',
+  dragging: false,
+  lastX: 0,
+  lastY: 0,
+  pinchDist: 0
+};
+
+function initEditor() {
+  editorState.ctx = editorState.canvas.getContext('2d');
+  drawCanvas();
+}
+
+function drawCanvas() {
+  const { img, canvas, ctx, scale, offsetX, offsetY, aspect } = editorState;
+  if (!img || !ctx) return;
+  
+  const ratio = aspect === '4:3' ? 4/3 : 3/4;
+  const w = Math.min(window.innerWidth - 32, 400);
+  const h = w / ratio;
+  canvas.width = w;
+  canvas.height = h;
+  
+  // 背景
+  ctx.fillStyle = '#f0f0f0';
+  ctx.fillRect(0, 0, w, h);
+  
+  // 画像描画
+  const iw = img.width * scale;
+  const ih = img.height * scale;
+  ctx.drawImage(img, offsetX, offsetY, iw, ih);
+}
+
+function fitImage() {
+  const { img, canvas, aspect } = editorState;
+  if (!img) return;
+  const ratio = aspect === '4:3' ? 4/3 : 3/4;
+  const cw = canvas.width, ch = canvas.height;
+  const scale = Math.min(cw / img.width, ch / img.height) * 0.9;
+  editorState.scale = scale;
+  editorState.offsetX = (cw - img.width * scale) / 2;
+  editorState.offsetY = (ch - img.height * scale) / 2;
+  drawCanvas();
+}
+
+// ---- ファイル選択 ----
+document.getElementById('pick-image-btn').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+
+document.getElementById('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    editorState.img = img;
+    document.getElementById('canvas-wrap').classList.remove('hidden');
+    fitImage();
+    log('Image loaded: ' + img.width + 'x' + img.height);
+  };
+  img.src = url;
+});
+
+// ---- アスペクト比変更 ----
+document.querySelectorAll('input[name="aspect"]').forEach(r => {
+  r.addEventListener('change', e => {
+    editorState.aspect = e.target.value;
+    fitImage();
+  });
+});
+
+// ---- 回転 ----
+document.getElementById('rotate-btn').addEventListener('click', () => {
+  if (!editorState.img) return;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = editorState.img.height;
+  canvas.height = editorState.img.width;
+  ctx.translate(canvas.width/2, canvas.height/2);
+  ctx.rotate(Math.PI/2);
+  ctx.drawImage(editorState.img, -editorState.img.width/2, -editorState.img.height/2);
+  editorState.img = new Image();
+  editorState.img.src = canvas.toDataURL();
+  editorState.img.onload = fitImage;
+});
+
+// ---- ズーム ----
+document.getElementById('zoom-in-btn').addEventListener('click', () => {
+  editorState.scale *= 1.2; drawCanvas();
+});
+document.getElementById('zoom-out-btn').addEventListener('click', () => {
+  editorState.scale /= 1.2; drawCanvas();
+});
+
+// ---- ドラッグ移動 ----
+const canvasEl = document.getElementById('editor-canvas');
+canvasEl.addEventListener('mousedown', e => { editorState.dragging = true; editorState.lastX = e.clientX; editorState.lastY = e.clientY; });
+canvasEl.addEventListener('mousemove', e => { if (!editorState.dragging) return; editorState.offsetX += e.clientX - editorState.lastX; editorState.offsetY += e.clientY - editorState.lastY; editorState.lastX = e.clientX; editorState.lastY = e.clientY; drawCanvas(); });
+canvasEl.addEventListener('mouseup', () => { editorState.dragging = false; });
+canvasEl.addEventListener('mouseleave', () => { editorState.dragging = false; });
+
+// タッチ対応
+canvasEl.addEventListener('touchstart', e => { if (e.touches.length === 1) { editorState.dragging = true; editorState.lastX = e.touches[0].clientX; editorState.lastY = e.touches[0].clientY; } else if (e.touches.length === 2) { editorState.pinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); editorState.dragging = false; } }, {passive:true});
+canvasEl.addEventListener('touchmove', e => { if (e.touches.length === 1 && editorState.dragging) { editorState.offsetX += e.touches[0].clientX - editorState.lastX; editorState.offsetY += e.touches[0].clientY - editorState.lastY; editorState.lastX = e.touches[0].clientX; editorState.lastY = e.touches[0].clientY; drawCanvas(); } else if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); editorState.scale *= d / editorState.pinchDist; editorState.pinchDist = d; drawCanvas(); } }, {passive:true});
+canvasEl.addEventListener('touchend', () => { editorState.dragging = false; });
+
+// ---- 適用ボタン ----
+document.getElementById('apply-btn').addEventListener('click', async () => {
+  if (!editorState.img) { log('No image to apply'); return; }
+  
+  const { canvas, aspect } = editorState;
+  const ratio = aspect === '4:3' ? 4/3 : 3/4;
+  const w = Math.min(window.innerWidth - 32, 400);
+  const h = w / ratio;
+  
+  // トリミング用キャンバス
+  const cropCanvas = document.createElement('canvas');
+  const cropCtx = cropCanvas.getContext('2d');
+  cropCanvas.width = w;
+  cropCanvas.height = h;
+  cropCtx.fillStyle = '#fff';
+  cropCtx.fillRect(0, 0, w, h);
+  cropCtx.drawImage(canvas, 0, 0, w, h);
+  
+  const dataUrl = cropCanvas.toDataURL('image/jpeg', 0.9);
+  window.adjustedImageDataUrl = dataUrl;
+  
+  log('Applied: ' + dataUrl.length + ' chars');
+  
+  // 類似検索タブへ切替 + プレビュー表示
+  showTab('search');
+  const preview = document.getElementById('search-preview-image');
+  const container = document.getElementById('search-preview-container');
+  if (preview && container) {
+    preview.src = dataUrl;
+    container.classList.remove('hidden');
+    log('Preview shown');
+  }
+  document.getElementById('search-btn').disabled = false;
+});
+
+// ---- 類似検索 ----
+document.getElementById('search-btn').addEventListener('click', async () => {
+  const dataUrl = window.adjustedImageDataUrl;
+  if (!dataUrl) { log('No adjusted image'); return; }
+  
+  log('Searching...');
+  document.getElementById('search-btn').disabled = true;
+  document.getElementById('search-results').innerHTML = '';
+  
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const form = new FormData();
+    form.append('image', blob, 'query.jpg');
+    form.append('index', 'main');
+    
+    const res = await fetch('https://192.168.1.192:8765/search', { method: 'POST', body: form });
+    const data = await res.json();
+    
+    log('Results: ' + (data.results?.length || 0) + ' items');
+    renderResults(data.results || []);
+  } catch (e) {
+    log('Search error: ' + e.message, true);
+  } finally {
+    document.getElementById('search-btn').disabled = false;
+  }
+});
+
+function renderResults(results) {
+  const el = document.getElementById('search-results');
+  if (!results.length) { el.innerHTML = '<p style="color:#666;text-align:center;">結果なし</p>'; return; }
+  el.innerHTML = results.map((r, i) => 
+    '<div class="search-result-item">' +
+      '<img src="https://192.168.1.192:8765' + r.image_url + '" alt="" />' +
+      '<div class="search-result-info">' +
+        '<div class="search-result-name">' + r.name + '</div>' +
+        '<div class="search-result-meta">類似度: ' + (r.similarity*100).toFixed(1) + '%</div>' +
+        '<div class="search-result-meta">' + r.path + '</div>' +
+      '</div>' +
+    '</div>'
+  ).join('');
+}
+
+// ---- 起動 ----
+initEditor();
+initLiff();
+log('Ready');
+</script>
+</body>
+</html>

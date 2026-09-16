@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>申請フォーム - v20250904e</title>
+  <script>window.__v="20250904c";</script>
+  <script charset="utf-8" src="/sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; padding-bottom: 20px; }
+
+    .tabs { display: flex; border-bottom: 2px solid #e0e0e0; background: #fff; position: sticky; top: 0; z-index: 10; }
+    .tab { flex: 1; padding: 14px 8px; text-align: center; cursor: pointer; border: none; background: none; font-size: 14px; color: #666; border-bottom: 3px solid transparent; -webkit-tap-highlight-color: transparent; }
+    .tab.active { color: #00b900; border-bottom-color: #00b900; font-weight: bold; }
+
+    .tab-content { display: none; padding: 16px; }
+    .tab-content.active { display: block; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: bold; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; }
+    .form-group textarea { min-height: 80px; resize: vertical; }
+
+    .btn-primary { width: 100%; padding: 14px; background: #00b900; color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .btn-primary:active { background: #00a000; }
+
+    .file-input-wrapper { border: 2px dashed #ddd; border-radius: 8px; padding: 20px; text-align: center; color: #999; }
+    .file-input-wrapper input[type="file"] { display: none; }
+    .file-label { display: block; padding: 12px; background: #00b900; color: #fff; border-radius: 6px; text-align: center; cursor: pointer; margin-top: 10px; -webkit-tap-highlight-color: transparent; }
+    .file-preview { margin-top: 10px; font-size: 14px; color: #666; }
+
+    .hidden { display: none !important; }
+
+    .debug-section { margin-top: 20px; padding: 10px; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 4px; font-size: 12px; font-family: monospace; }
+    #debug-log { max-height: 200px; overflow-y: auto; word-break: break-all; }
+
+    .editor-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 1000; display: none; flex-direction: column; }
+    .editor-overlay.active { display: flex; }
+    .editor-header { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #222; color: #fff; }
+    .editor-header button { background: #00b900; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; font-size: 14px; }
+    .editor-canvas-container { flex: 1; position: relative; overflow: hidden; background: #111; touch-action: none; }
+    .editor-controls { display: flex; gap: 8px; padding: 10px; background: #222; flex-wrap: wrap; }
+    .editor-controls button { flex: 1; background: #444; color: #fff; border: none; padding: 10px; border-radius: 4px; font-size: 13px; min-width: 70px; }
+    .editor-info { padding: 6px 10px; background: #333; color: #aaa; font-size: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム</h1>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="overtime">残業申請</button>
+    <button class="tab" data-tab="paid">有給申請</button>
+    <button class="tab" data-tab="search">類似検索</button>
+    <button class="tab" data-tab="adjust">画像調整</button>
+  </div>
+
+  <div class="tab-content active" id="tab-overtime">
+    <div class="form-group">
+      <label>日付</label>
+      <input type="date" id="overtime-date">
+    </div>
+    <div class="form-group">
+      <label>理由</label>
+      <textarea id="overtime-reason" placeholder="残業理由を入力"></textarea>
+    </div>
+    <button class="btn-primary" onclick="alert('残業申請を送信しました')">送信</button>
+  </div>
+
+  <div class="tab-content" id="tab-paid">
+    <div class="form-group">
+      <label>日付</label>
+      <input type="date" id="paid-date">
+    </div>
+    <div class="form-group">
+      <label>種別</label>
+      <select id="paid-type">
+        <option>年次有給休暇</option>
+        <option>夏季休暇</option>
+        <option>慶弔休暇</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>理由</label>
+      <textarea id="paid-reason" placeholder="休暇理由を入力"></textarea>
+    </div>
+    <button class="btn-primary" onclick="alert('有給申請を送信しました')">送信</button>
+  </div>
+
+  <div class="tab-content" id="tab-search">
+    <div class="form-group">
+      <label>インデックス</label>
+      <select id="search-index">
+        <option value="main">メイン</option>
+        <option value="photo">写真</option>
+      </select>
+    </div>
+    <div class="file-input-wrapper">
+      <label style="display:block;font-size:14px;color:#666;">図面画像を選択</label>
+      <input type="file" id="search-image" accept="image/*">
+      <label for="search-image" class="file-label">📷 撮影・写真を選択</label>
+      <div class="file-preview" id="file-preview">未選択</div>
+    </div>
+    <div id="search-preview-container" class="hidden" style="margin-top:10px;position:relative;width:100%;max-width:400px;margin-left:auto;margin-right:auto;">
+      <img id="search-preview-image" style="width:100%;border-radius:8px;border:2px solid #00b900;display:block;" />
+      <div style="text-align:center;font-size:12px;color:#00b900;margin-top:4px;">✅ 編集済み画像</div>
+    </div>
+    <button class="btn-primary" id="search-submit" style="margin-top:16px;padding:16px;font-size:18px;-webkit-tap-highlight-color:transparent;">🔍 検索する</button>
+    <div id="search-status" class="hidden" style="margin-top:10px;padding:10px;background:#f0f0f0;border-radius:4px;"></div>
+    <div id="search-results" class="hidden" style="margin-top:14px;"></div>
+    <div id="original-preview-container" style="margin-top:12px;padding:8px;background:#f8f8f8;border-radius:6px;border:1px solid #e0e0e0;display:none;">
+      <div style="font-size:12px;color:#666;margin-bottom:4px;">元画像</div>
+      <img id="original-preview-img" style="width:100%;max-height:180px;object-fit:contain;background:#fff;border-radius:4px;border:1px solid #ccc;" />
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-adjust">
+    <div class="form-group">
+      <label>画像を選択</label>
+      <input type="file" id="adjust-image" accept="image/*">
+      <label for="adjust-image" class="file-label">📷 撮影・写真を選択</label>
+      <div class="file-preview" id="adjust-preview">未選択</div>
+    </div>
+    <div class="form-group">
+      <label>アスペクト比</label>
+      <select id="adjust-aspect">
+        <option value="1.414">A4 (1:√2, 縦)</option>
+        <option value="0.707">A4 (1:√2, 横)</option>
+      </select>
+    </div>
+    <div id="adjust-canvas-container" style="position:relative;width:100%;height:300px;background:#111;border-radius:8px;overflow:hidden;touch-action:none;">
+      <canvas id="adjust-canvas" style="width:100%;height:100%;display:block;"></canvas>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+      <button class="btn-primary" id="rotate-left" style="flex:1;padding:10px;font-size:14px;">↺ -90°</button>
+      <button class="btn-primary" id="rotate-right" style="flex:1;padding:10px;font-size:14px;">↻ +90°</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+      <button class="btn-primary" id="zoom-in" style="flex:1;padding:10px;font-size:14px;">拡大</button>
+      <button class="btn-primary" id="zoom-out" style="flex:1;padding:10px;font-size:14px;">縮小</button>
+    </div>
+    <button class="btn-primary" id="adjust-apply" style="margin-top:10px;padding:14px;font-size:16px;background:#00b900;">✅ 適用して類似検索へ</button>
+    <div style="margin-top:10px;font-size:12px;color:#666;text-align:center;">指でドラッグ / ピンチで拡大縮小</div>
+  </div>
+
+  <div class="debug-section">
+    <strong>デバッグ</strong>
+    <div id="debug-log">loading...</div>
+  </div>
+
+  <div class="editor-overlay" id="editor-overlay" style="display:none !important;">
+    <div class="editor-header">
+      <span>画像編集（4:3 / 3:4）</span>
+      <div>
+        <button id="editor-reset">リセット</button>
+        <button id="editor-done">完了</button>
+      </div>
+    </div>
+    <div class="editor-info" id="editor-info">指でドラッグ / ピンチで拡大縮小 / 90度回転</div>
+    <div class="editor-canvas-container" id="editor-container">
+      <canvas id="editor-canvas"></canvas>
+    </div>
+    <div class="editor-controls">
+      <button id="rotate-left">↺ -90°</button>
+      <button id="rotate-right">↻ +90°</button>
+      <button id="aspect-4-3" style="background:#00b900;">4:3</button>
+      <button id="aspect-3-4" style="background:#0066cc;">3:4</button>
+      <button id="zoom-in">拡大</button>
+      <button id="zoom-out">縮小</button>
+    </div>
+  </div>
+
+  <script>
+    // === LOGGING ===
+    var logEl = document.getElementById('debug-log');
+    function log(msg, isError) {
+      console.log(msg);
+      if (logEl) {
+        logEl.textContent = msg + '\n' + logEl.textContent;
+      }
+    }
+    log('=== JS LOADED ===');
+
+    // === ELEMENTS ===
+    var fileInput = document.getElementById('search-image');
+    var filePreview = document.getElementById('file-preview');
+    var searchBtn = document.getElementById('search-submit');
+    var searchStatus = document.getElementById('search-status');
+    var editorOverlay = document.getElementById('editor-overlay');
+    var editorCanvas = document.getElementById('editor-canvas');
+    var editorContainer = document.getElementById('editor-container');
+
+    log('fileInput: ' + !!fileInput);
+    log('searchBtn: ' + !!searchBtn);
+    log('editorOverlay: ' + !!editorOverlay);
+
+    // === TAB SWITCHING ===
+    function initTabs() {
+      var tabs = document.querySelectorAll('.tab');
+      var contents = document.querySelectorAll('.tab-content');
+      log('initTabs: found ' + tabs.length + ' tabs, ' + contents.length + ' contents');
+
+      tabs.forEach(function(tab, index) {
+        tab.addEventListener('touchstart', function(e) {
+          e.preventDefault();
+          log('Tab touched: ' + tab.textContent + ' (index ' + index + ')');
+          tabs.forEach(function(t) { t.classList.remove('active'); });
+          contents.forEach(function(c) { c.classList.remove('active'); });
+          tab.classList.add('active');
+          if (contents[index]) { contents[index].classList.add('active'); }
+          log('Tab switched to index ' + index);
+        });
+        tab.addEventListener('click', function(e) {
+          e.preventDefault();
+          log('Tab clicked: ' + tab.textContent + ' (index ' + index + ')');
+          tabs.forEach(function(t) { t.classList.remove('active'); });
+          contents.forEach(function(c) { c.classList.remove('active'); });
+          tab.classList.add('active');
+          if (contents[index]) { contents[index].classList.add('active'); }
+          log('Tab switched to index ' + index);
+        });
+        log('Tab listener added: ' + tab.textContent);
+      });
+      log('initTabs: COMPLETE');
+    }
+
+    // === EDITOR STATE ===
+    var editorState = { rotation: 0, scale: 1, offsetX: 0, offsetY: 0, image: null, aspectRatio: 4/3, trimMode: false };
+
+    function getCropRect() {
+      var canvas = document.getElementById('editor-canvas');
+      var container = document.getElementById('editor-container');
+      if (!canvas || !container || !editorState.image) return null;
+      var cw = container.clientWidth;
+      var ch = container.clientHeight;
+      var ar = editorState.aspectRatio;
+      var cropW, cropH;
+      if (cw / ch > ar) {
+        cropH = ch * 0.85;
+        cropW = cropH * ar;
+      } else {
+        cropW = cw * 0.85;
+        cropH = cropW / ar;
+      }
+      return {
+        x: (cw - cropW) / 2,
+        y: (ch - cropH) / 2,
+        w: cropW,
+        h: cropH,
+        cx: cw / 2,
+        cy: ch / 2
+      };
+    }
+
+    function drawEditor() {
+      if (!editorState.image) return;
+      var canvas = document.getElementById('editor-canvas');
+      var ctx = canvas.getContext('2d');
+      var container = document.getElementById('editor-container');
+      if (!canvas || !ctx || !container) return;
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      var cw = canvas.width;
+      var ch = canvas.height;
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.save();
+      var crop = getCropRect();
+      if (crop) {
+        ctx.translate(crop.cx + editorState.offsetX, crop.cy + editorState.offsetY);
+      } else {
+        ctx.translate(cw / 2 + editorState.offsetX, ch / 2 + editorState.offsetY);
+      }
+      ctx.rotate(editorState.rotation * Math.PI / 180);
+      ctx.scale(editorState.scale, editorState.scale);
+      ctx.drawImage(editorState.image, -editorState.image.width / 2, -editorState.image.height / 2);
+      ctx.restore();
+      if (crop) {
+        ctx.strokeStyle = '#00b900';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(crop.x, crop.y, crop.w, crop.h);
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.fillRect(0, 0, cw, crop.y);
+        ctx.fillRect(0, crop.y + crop.h, cw, ch - crop.y - crop.h);
+        ctx.fillRect(0, crop.y, crop.x, crop.h);
+        ctx.fillRect(crop.x + crop.w, crop.y, cw - crop.x - crop.w, crop.h);
+      }
+    }
+
+    function showEditor(file) {
+      log('showEditor: ' + file.name);
+      if (searchStatus) { searchStatus.classList.remove('hidden'); searchStatus.textContent = '編集中: ' + file.name; }
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var img = new Image();
+        img.onload = function() {
+          editorState = { rotation: 0, scale: 1, offsetX: 0, offsetY: 0, image: img, aspectRatio: 4/3, trimMode: false };
+          if (editorOverlay) editorOverlay.classList.add('active');
+          setTimeout(function() { drawEditor(); }, 100);
+          log('Editor opened');
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // === EDITOR CONTROLS ===
+    document.getElementById('rotate-left').addEventListener('click', function() {
+      editorState.rotation -= 90;
+      drawEditor();
+      log('rotate -90');
+    });
+    document.getElementById('rotate-right').addEventListener('click', function() {
+      editorState.rotation += 90;
+      drawEditor();
+      log('rotate +90');
+    });
+    document.getElementById('zoom-in').addEventListener('click', function() {
+      editorState.scale *= 1.15;
+      drawEditor();
+      log('zoom in');
+    });
+    document.getElementById('zoom-out').addEventListener('click', function() {
+      editorState.scale /= 1.15;
+      drawEditor();
+      log('zoom out');
+    });
+    document.getElementById('aspect-4-3').addEventListener('click', function() {
+      editorState.aspectRatio = 4/3;
+      drawEditor();
+      log('aspect 4:3');
+    });
+    document.getElementById('aspect-3-4').addEventListener('click', function() {
+      editorState.aspectRatio = 3/4;
+      drawEditor();
+      log('aspect 3:4');
+    });
+    document.getElementById('editor-done').addEventListener('click', function() {
+      if (editorOverlay) editorOverlay.classList.remove('active');
+      log('Editor done');
+    });
+
+    // === APPLY BUTTON ===
+    (function() {
+      var btn = document.getElementById('adjust-apply');
+      if (btn) {
+        btn.type = 'button';
+        function applyOnce(e) {
+          e.preventDefault();
+          try {
+            if (!adjustImage || !adjustCanvas || !adjustCtx) {
+              log('Apply cancelled: no image loaded');
+              return;
+            }
+            log('Apply started: img=' + adjustImage.naturalWidth + 'x' + adjustImage.naturalHeight + ' scale=' + adjustState.scale + ' rot=' + adjustState.rotation + ' off=' + adjustState.offsetX + ',' + adjustState.offsetY);
+
+            var ar = adjustState.aspectRatio;
+            var imgW = adjustImage.naturalWidth;
+            var imgH = adjustImage.naturalHeight;
+
+            // The canvas displays the image at a "fit scale" then applies zoom/scale and pan
+            // We need to figure out the mapping from canvas pixels to original image pixels
+            var cw = adjustCanvas.width;
+            var ch = adjustCanvas.height;
+
+            // Fit scale: how the image was originally scaled to fit the canvas (centered)
+            var fitScale = Math.min(cw / imgW, ch / imgH);
+            // The total display scale = fitScale * adjustState.scale
+            var displayScale = fitScale * adjustState.scale;
+
+            // The image is drawn centered with offset. The center of the image on canvas:
+            var centerX = cw / 2 + adjustState.offsetX;
+            var centerY = ch / 2 + adjustState.offsetY;
+
+            // Crop rectangle in canvas/screen space (centered on canvas)
+            var cropW, cropH;
+            if (cw / ch > ar) {
+              cropH = ch * 0.85;
+              cropW = cropH * ar;
+            } else {
+              cropW = cw * 0.85;
+              cropH = cropW / ar;
+            }
+
+            // Convert crop rectangle from screen space to original image space
+            // The crop is centered on the canvas center, so in image space it's centered at the image center offset by pan
+            var cropImgW = cropW / displayScale;
+            var cropImgH = cropH / displayScale;
+
+            // The center of the crop in screen space
+            var cropCenterX = cw / 2;
+            var cropCenterY = ch / 2;
+
+            // Convert to image space
+            var imgCenterX = imgW / 2;
+            var imgCenterY = imgH / 2;
+
+            // The crop center in image space = image center + (pan_offset / displayScale)
+            // Because pan moves the image relative to center
+            var cropImgCenterX = imgCenterX - (adjustState.offsetX / displayScale);
+            var cropImgCenterY = imgCenterY - (adjustState.offsetY / displayScale);
+
+            var srcX = cropImgCenterX - cropImgW / 2;
+            var srcY = cropImgCenterY - cropImgH / 2;
+
+            // Clamp to image bounds
+            srcX = Math.max(0, srcX);
+            srcY = Math.max(0, srcY);
+            var actualCropW = Math.min(cropImgW, imgW - srcX);
+            var actualCropH = Math.min(cropImgH, imgH - srcY);
+
+            log('Apply: img=' + imgW + 'x' + imgH + ' crop_src=' + Math.round(srcX) + ',' + Math.round(srcY) + ' crop_size=' + Math.round(actualCropW) + 'x' + Math.round(actualCropH) + ' displayScale=' + displayScale.toFixed(4));
+
+            // Create output canvas at crop resolution (original scale, not downsized)
+            var outCanvas = document.createElement('canvas');
+            var outCtx = outCanvas.getContext('2d');
+
+            // Determine output dimensions based on aspect ratio and rotation
+            var outW, outH;
+            if (adjustState.rotation % 360 !== 0) {
+              // After 90° rotation, swap width/height
+              var rotatedW = actualCropH;
+              var rotatedH = actualCropW;
+              outCanvas.width = Math.round(rotatedW);
+              outCanvas.height = Math.round(rotatedH);
+
+              outCtx.fillStyle = '#fff';
+              outCtx.fillRect(0, 0, rotatedW, rotatedH);
+              outCtx.save();
+              outCtx.translate(rotatedW / 2, rotatedH / 2);
+              outCtx.rotate(adjustState.rotation * Math.PI / 180);
+              outCtx.drawImage(adjustImage,
+                srcX, srcY, actualCropW, actualCropH,
+                -actualCropW / 2, -actualCropH / 2, actualCropW, actualCropH
+              );
+              outCtx.restore();
+            } else {
+              outCanvas.width = Math.round(actualCropW);
+              outCanvas.height = Math.round(actualCropH);
+
+              outCtx.fillStyle = '#fff';
+              outCtx.fillRect(0, 0, actualCropW, actualCropH);
+              outCtx.drawImage(adjustImage,
+                srcX, srcY, actualCropW, actualCropH,
+                0, 0, actualCropW, actualCropH
+              );
+            }
+
+            outCanvas.toBlob(function(blob) {
+              if (!blob) {
+                log('Apply cancelled: toBlob returned no blob', true);
+                return;
+              }
+              var reader = new FileReader();
+              reader.onload = function(ev) {
+                window.adjustedImageDataUrl = ev.target.result;
+                window.adjustedFileName = window.adjustedFileName || 'adjusted_image.jpg';
+                log('Applied: ' + window.adjustedFileName + ' dataURL size=' + ev.target.result.length + ' chars');
+
+                // Switch to search tab
+                var searchTab = null;
+                var tabsList = document.querySelectorAll('.tab');
+                for (var ti = 0; ti < tabsList.length; ti++) {
+                  if (tabsList[ti].getAttribute('data-tab') === 'search') {
+                    searchTab = tabsList[ti];
+                    break;
+                  }
+                }
+                if (searchTab) {
+                  searchTab.click();
+                }
+                document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+                var sc = document.getElementById('tab-search');
+                if (sc) sc.classList.add('active');
+                log('Switched to search tab' + (sc ? ' OK' : ' FAILED'));
+
+                // Show preview
+                var preview = document.getElementById('search-preview-image');
+                var container = document.getElementById('search-preview-container');
+                if (preview && container) {
+                  preview.src = window.adjustedImageDataUrl;
+                  container.classList.remove('hidden');
+                  preview.classList.remove('hidden');
+                  log('Preview shown');
+                }
+              };
+              reader.readAsDataURL(blob);
+            }, 'image/jpeg', 0.92);
+          } catch (err) {
+            log('Apply error: ' + (err && err.message ? err.message : String(err)), true);
+          }
+        }
+        btn.addEventListener('touchstart', applyOnce, { passive: false });
+        btn.addEventListener('click', applyOnce);
+        log('adjust-apply listener (touchstart+click) attached');
+      }
+    })();
+
+    // === PINCH ZOOM & DRAG ===
+    (function() {
+      var container = document.getElementById('editor-container');
+      if (!container) return;
+      var lastDist = 0;
+      var lastX = 0, lastY = 0;
+      var dragging = false;
+      container.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 2) {
+          e.preventDefault();
+          var dx = e.touches[0].clientX - e.touches[1].clientX;
+          var dy = e.touches[0].clientY - e.touches[1].clientY;
+          lastDist = Math.sqrt(dx * dx + dy * dy);
+        } else if (e.touches.length === 1) {
+          dragging = true;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+        }
+      }, { passive: false });
+      container.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        if (e.touches.length === 2) {
+          var dx = e.touches[0].clientX - e.touches[1].clientX;
+          var dy = e.touches[0].clientY - e.touches[1].clientY;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          if (lastDist > 0) {
+            var scale = dist / lastDist;
+            editorState.scale *= scale;
+            drawEditor();
+          }
+          lastDist = dist;
+        } else if (e.touches.length === 1 && dragging) {
+          var moveX = e.touches[0].clientX - lastX;
+          var moveY = e.touches[0].clientY - lastY;
+          editorState.offsetX += moveX;
+          editorState.offsetY += moveY;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+          drawEditor();
+        }
+      }, { passive: false });
+      container.addEventListener('touchend', function() {
+        lastDist = 0;
+        dragging = false;
+      });
+    })();
+
+    // === IMAGE ADJUST TAB ===
+    var adjustFileInput = document.getElementById('adjust-image');
+    var adjustPreview = document.getElementById('adjust-preview');
+    var adjustCanvas = document.getElementById('adjust-canvas');
+    var adjustContainer = document.getElementById('adjust-canvas-container');
+    var adjustCtx = null;
+    var adjustImage = null;
+    var adjustState = { rotation: 0, scale: 1, offsetX: 0, offsetY: 0, aspectRatio: Math.sqrt(2) };
+
+    function drawAdjustCanvas() {
+      if (!adjustImage || !adjustCtx || !adjustContainer) return;
+      var canvas = adjustCanvas;
+      var ctx = adjustCtx;
+      var container = adjustContainer;
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      var cw = canvas.width;
+      var ch = canvas.height;
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.save();
+      var ar = adjustState.aspectRatio;
+      var cropW = 0, cropH = 0;
+      if (cw / ch > ar) {
+        cropH = ch * 0.85;
+        cropW = cropH * ar;
+      } else {
+        cropW = cw * 0.85;
+        cropH = cropW / ar;
+      }
+      var cx = cw / 2 + adjustState.offsetX;
+      var cy = ch / 2 + adjustState.offsetY;
+      ctx.translate(cx, cy);
+      ctx.rotate(adjustState.rotation * Math.PI / 180);
+      ctx.scale(adjustState.scale, adjustState.scale);
+      ctx.drawImage(adjustImage, -adjustImage.width / 2, -adjustImage.height / 2);
+      ctx.restore();
+      ctx.strokeStyle = '#00b900';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect((cw - cropW) / 2, (ch - cropH) / 2, cropW, cropH);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.fillRect(0, 0, cw, (ch - cropH) / 2);
+      ctx.fillRect(0, (ch + cropH) / 2, cw, ch - (ch + cropH) / 2);
+      ctx.fillRect(0, (ch - cropH) / 2, (cw - cropW) / 2, cropH);
+      ctx.fillRect((cw + cropW) / 2, (ch - cropH) / 2, cw - (cw + cropW) / 2, cropH);
+    }
+
+    if (adjustFileInput) {
+      adjustFileInput.addEventListener('change', function() {
+        log('adjust change: ' + (this.files[0] ? this.files[0].name : 'null'));
+        if (this.files[0]) {
+          if (adjustPreview) adjustPreview.textContent = this.files[0].name;
+          var reader = new FileReader();
+          reader.onload = function(e) {
+            var img = new Image();
+            img.onload = function() {
+              adjustImage = img;
+              adjustState = { rotation: 0, scale: 1, offsetX: 0, offsetY: 0, aspectRatio: Math.sqrt(2) };
+              if (!adjustCtx && adjustCanvas) {
+                adjustCtx = adjustCanvas.getContext('2d');
+              }
+              drawAdjustCanvas();
+              log('Adjust canvas loaded');
+            };
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(this.files[0]);
+        }
+      });
+      log('adjustFileInput listener attached');
+    }
+
+    document.getElementById('rotate-left').addEventListener('click', function() {
+      adjustState.rotation -= 90;
+      drawAdjustCanvas();
+      log('adjust rotate -90');
+    });
+    document.getElementById('rotate-right').addEventListener('click', function() {
+      adjustState.rotation += 90;
+      drawAdjustCanvas();
+      log('adjust rotate +90');
+    });
+    document.getElementById('zoom-in').addEventListener('click', function() {
+      adjustState.scale *= 1.15;
+      drawAdjustCanvas();
+      log('adjust zoom in');
+    });
+    document.getElementById('zoom-out').addEventListener('click', function() {
+      adjustState.scale /= 1.15;
+      drawAdjustCanvas();
+      log('adjust zoom out');
+    });
+    document.getElementById('adjust-aspect').addEventListener('change', function() {
+      adjustState.aspectRatio = parseFloat(this.value);
+      drawAdjustCanvas();
+      log('adjust aspect: ' + this.value);
+    });
+
+    if (adjustContainer) {
+      var lastDist = 0, lastX = 0, lastY = 0, adjDragging = false;
+      adjustContainer.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 2) {
+          e.preventDefault();
+          var dx = e.touches[0].clientX - e.touches[1].clientX;
+          var dy = e.touches[0].clientY - e.touches[1].clientY;
+          lastDist = Math.sqrt(dx * dx + dy * dy);
+        } else if (e.touches.length === 1) {
+          adjDragging = true;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+        }
+      }, { passive: false });
+      adjustContainer.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        if (e.touches.length === 2) {
+          var dx = e.touches[0].clientX - e.touches[1].clientX;
+          var dy = e.touches[0].clientY - e.touches[1].clientY;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          if (lastDist > 0) {
+            adjustState.scale *= dist / lastDist;
+            drawAdjustCanvas();
+          }
+          lastDist = dist;
+        } else if (e.touches.length === 1 && adjDragging) {
+          adjustState.offsetX += e.touches[0].clientX - lastX;
+          adjustState.offsetY += e.touches[0].clientY - lastY;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+          drawAdjustCanvas();
+        }
+      }, { passive: false });
+      adjustContainer.addEventListener('touchend', function() {
+        lastDist = 0;
+        adjDragging = false;
+      });
+    }
+
+    // === FILE INPUT ===
+    if (fileInput) {
+      fileInput.addEventListener('change', function() {
+        log('fileInput change: ' + (this.files[0] ? this.files[0].name : 'null'));
+        if (this.files[0]) {
+          if (filePreview) filePreview.textContent = this.files[0].name;
+          // Switch to adjust tab and load image there
+          adjustFileInput.files = this.files;
+          adjustFileInput.dispatchEvent(new Event('change'));
+          // Switch tab to adjust
+          var tabs = document.querySelectorAll('.tab');
+          var contents = document.querySelectorAll('.tab-content');
+          tabs.forEach(function(t) { t.classList.remove('active'); });
+          contents.forEach(function(c) { c.classList.remove('active'); });
+          var adjustTab = document.querySelector('[data-tab="adjust"]');
+          var adjustContent = document.getElementById('tab-adjust');
+          if (adjustTab) adjustTab.classList.add('active');
+          if (adjustContent) adjustContent.classList.add('active');
+          log('Switched to adjust tab');
+        }
+      });
+      log('fileInput listener attached');
+    } else {
+      log('fileInput NOT FOUND', true);
+    }
+
+    // === ORIGINAL IMAGE PREVIEW ===
+    var originalPreviewImg = document.getElementById('original-preview-img');
+    var originalPreviewContainer = document.getElementById('original-preview-container');
+
+    function showOriginalPreview(dataUrl, fileName) {
+      if (originalPreviewImg && originalPreviewContainer) {
+        originalPreviewImg.src = dataUrl;
+        originalPreviewImg.onload = function() {
+          originalPreviewContainer.style.display = 'block';
+          log('Original preview shown: ' + (fileName || 'image'));
+        };
+      }
+    }
+
+    // 画像編集完了直後に元画像を表示（編集後画像との比較用）
+    if (window.adjustedImageDataUrl && originalPreviewContainer) {
+      // 編集後画像を元画像プレビューにも表示しておく
+      showOriginalPreview(window.adjustedImageDataUrl, window.adjustedFileName);
+    }
+
+    // === SEARCH BUTTON ===
+    if (searchBtn) {
+      searchBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        searchBtn.style.background = '#e74c3c';
+        log('SEARCH touchstart');
+        if (window.adjustedImageDataUrl) {
+          log('Using adjusted image for search');
+          // Send the adjusted image to search API
+          var formData = new FormData();
+          var blob = dataURLtoBlob(window.adjustedImageDataUrl);
+          formData.append('image', blob, 'adjusted_image.jpg');
+          formData.append('index', document.getElementById('search-index').value);
+          
+          fetch('/search', {
+            method: 'POST',
+            body: formData
+          }).then(function(res) {
+            return res.json();
+          }).then(function(data) {
+            log('Search results: ' + JSON.stringify(data).substring(0, 200));
+            log('Search results: ' + JSON.stringify(data).substring(0, 200));
+            if (data && data.results && Array.isArray(data.results) && data.results.length) {
+              var resultsDiv = document.getElementById('search-results');
+              if (resultsDiv) {
+                // 既存結果をクリア
+                resultsDiv.innerHTML = '';
+                resultsDiv.classList.remove('hidden');
+                var header = document.createElement('div');
+                header.style.cssText = 'font-weight:bold;margin-bottom:6px;font-size:14px;';
+                header.textContent = '検索結果: ' + data.results.length + '件';
+                resultsDiv.appendChild(header);
+                for (var i = 0; i < data.results.length; i++) {
+                  (function(r) {
+                    var item = document.createElement('div');
+                    item.style.cssText = 'background:#fff;border-radius:6px;padding:8px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,0.08);overflow:hidden;';
+                    var row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+                    var img = document.createElement('img');
+                    var src = '';
+                    if (r.image_url) src = 'https://192.168.1.192:8765' + r.image_url;
+                    else if (r.path) src = 'https://192.168.1.192:8765/search-images/fallback.png';
+                    img.src = src;
+                    img.style.cssText = 'width:120px;height:90px;object-fit:cover;border-radius:4px;background:#eee;';
+                    img.alt = r.name || 'result';
+                    var info = document.createElement('div');
+                    info.style.cssText = 'flex:1;min-width:0;';
+                    var nameEl = document.createElement('div');
+                    nameEl.style.cssText = 'font-weight:bold;font-size:13px;color:#2a2a2a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+                    nameEl.textContent = r.name || 'result';
+                    var simEl = document.createElement('div');
+                    simEl.style.cssText = 'font-size:11px;color:#888;';
+                    simEl.textContent = '類似度: ' + (r.similarity != null && r.similarity !== undefined ? r.similarity.toFixed(4) : 'N/A');
+                    info.appendChild(nameEl);
+                    info.appendChild(simEl);
+                    row.appendChild(img);
+                    row.appendChild(info);
+                    item.appendChild(row);
+                    resultsDiv.appendChild(item);
+                  })(data.results[i]);
+                }
+                log('Search results rendered: ' + data.results.length + ' items');
+              }
+            } else {
+              var fallbackDiv = document.getElementById('search-results');
+              if (fallbackDiv) {
+                fallbackDiv.innerHTML = '検索結果がありませんでした。';
+                fallbackDiv.classList.remove('hidden');
+              }
+            }
+          }).catch(function(err) {
+            log('Search error: ' + err.message, true);
+          });
+        } else {
+          alert('画像を選択してください');
+        }
+        setTimeout(function(){ searchBtn.style.background = ''; }, 500);
+      }, { passive: false });
+      log('searchBtn touchstart listener attached');
+    }
+
+    function dataURLtoBlob(dataurl) {
+      var arr = dataurl.split(',');
+      var mime = arr[0].match(/:(.*?);/)[1];
+      var bstr = atob(arr[1]);
+      var n = bstr.length;
+      var u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      return new Blob([u8arr], { type: mime });
+    }
+
+    // === INIT LIFF ===
+    async function initLiff() {
+      log('initLiff: START');
+      var timeoutPromise = new Promise(function(resolve) {
+        setTimeout(function() {
+          log('initLiff: liff.init TIMEOUT after 10s', true);
+          resolve('timeout');
+        }, 10000);
+      });
+      try {
+        log('initLiff: calling liff.init...');
+        var result = await Promise.race([
+          liff.init({ liffId: '2011376207-0e7oVWOT' }),
+          timeoutPromise
+        ]);
+        if (result !== 'timeout') {
+          log('initLiff: liff.init SUCCESS');
+        }
+      } catch (err) {
+        log('initLiff: liff.init ERROR: ' + err.message, true);
+      }
+      log('initTabs for debugging');
+      initTabs();
+      log('initLiff: COMPLETE');
+    }
+
+    // === START ===
+    log('Starting...');
+    try {
+      initTabs();
+      log('initTabs called successfully');
+    } catch (e) {
+      log('initTabs ERROR: ' + e.message, true);
+    }
+    log('Calling initLiff...');
+    initLiff().catch(function(e) {
+      log('initLiff promise rejected: ' + e.message, true);
+    });
+    log('All initialization complete');
+  </script>
+</body>
+</html>

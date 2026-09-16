@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>申請フォーム</title>
+  <script charset="utf-8" src="/sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; padding-bottom: 40px; }
+
+    .tabs { display: flex; border-bottom: 2px solid #e0e0e0; background: #fff; }
+    .tab { flex: 1; padding: 14px 8px; text-align: center; cursor: pointer; border: none; background: none; font-size: 14px; color: #666; border-bottom: 3px solid transparent; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
+    .tab.active { color: #00b900; border-bottom-color: #00b900; font-weight: bold; }
+
+    .tab-content { display: none; padding: 16px; }
+    .tab-content.active { display: block; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: bold; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; }
+    .form-group textarea { min-height: 80px; resize: vertical; }
+
+    .btn-primary { width: 100%; padding: 14px; background: #00b900; color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .btn-primary:active { background: #00a000; }
+
+    .file-input-wrapper { border: 2px dashed #ddd; border-radius: 8px; padding: 20px; text-align: center; color: #999; }
+    .file-input-wrapper input[type="file"] { display: none; }
+    .file-label { display: block; padding: 12px; background: #00b900; color: #fff; border-radius: 6px; text-align: center; cursor: pointer; margin-top: 10px; -webkit-tap-highlight-color: transparent; }
+    .file-preview { margin-top: 10px; font-size: 14px; color: #666; }
+
+    .hidden { display: none !important; }
+
+    .debug-section { margin-top: 20px; padding: 10px; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 4px; font-size: 12px; font-family: monospace; }
+    #debug-log { max-height: 200px; overflow-y: auto; word-break: break-all; }
+
+    .editor-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 1000; display: none; flex-direction: column; }
+    .editor-overlay.active { display: flex; }
+    .editor-header { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #222; color: #fff; }
+    .editor-header button { background: #00b900; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; font-size: 14px; }
+    .editor-canvas-container { flex: 1; position: relative; overflow: hidden; background: #111; touch-action: none; }
+    .editor-controls { display: flex; gap: 8px; padding: 10px; background: #222; flex-wrap: wrap; }
+    .editor-controls button { flex: 1; background: #444; color: #fff; border: none; padding: 10px; border-radius: 4px; font-size: 13px; min-width: 70px; }
+  </style>
+</head>
+<body>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム</h1>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="overtime">残業申請</button>
+    <button class="tab" data-tab="paid">有給申請</button>
+    <button class="tab" data-tab="search">類似検索</button>
+  </div>
+
+  <div class="tab-content active" id="tab-overtime">
+    <div class="form-group">
+      <label>日付</label>
+      <input type="date" id="overtime-date">
+    </div>
+    <div class="form-group">
+      <label>理由</label>
+      <textarea id="overtime-reason" placeholder="残業理由を入力"></textarea>
+    </div>
+    <button class="btn-primary" onclick="alert('残業申請を送信しました')">送信</button>
+  </div>
+
+  <div class="tab-content" id="tab-paid">
+    <div class="form-group">
+      <label>日付</label>
+      <input type="date" id="paid-date">
+    </div>
+    <div class="form-group">
+      <label>種別</label>
+      <select id="paid-type">
+        <option>年次有給休暇</option>
+        <option>夏季休暇</option>
+        <option>慶弔休暇</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>理由</label>
+      <textarea id="paid-reason" placeholder="休暇理由を入力"></textarea>
+    </div>
+    <button class="btn-primary" onclick="alert('有給申請を送信しました')">送信</button>
+  </div>
+
+  <div class="tab-content" id="tab-search">
+    <div class="form-group">
+      <label>インデックス</label>
+      <select id="search-index">
+        <option value="main">メイン</option>
+        <option value="photo">写真</option>
+      </select>
+    </div>
+    <div class="file-input-wrapper">
+      <label style="display:block;font-size:14px;color:#666;">図面画像を選択</label>
+      <input type="file" id="search-image" accept="image/*">
+      <label for="search-image" class="file-label">📷 撮影・写真を選択</label>
+      <div class="file-preview" id="file-preview">未選択</div>
+    </div>
+    <button class="btn-primary" id="search-submit" style="margin-top:16px;">検索する</button>
+    <div id="search-status" class="hidden" style="margin-top:10px;padding:10px;background:#f0f0f0;border-radius:4px;"></div>
+  </div>
+
+  <div class="debug-section">
+    <strong>デバッグ</strong>
+    <div id="debug-log">loading...</div>
+  </div>
+
+  <div class="editor-overlay" id="editor-overlay">
+    <div class="editor-header">
+      <span>画像編集</span>
+      <div>
+        <button id="editor-reset">リセット</button>
+        <button id="editor-done">完了</button>
+      </div>
+    </div>
+    <div class="editor-canvas-container" id="editor-container">
+      <canvas id="editor-canvas"></canvas>
+    </div>
+    <div class="editor-controls">
+      <button id="rotate-left">↺ -90°</button>
+      <button id="rotate-right">↻ +90°</button>
+      <button id="zoom-in">拡大</button>
+      <button id="zoom-out">縮小</button>
+      <button id="trim-btn">✂ 切り取り</button>
+    </div>
+  </div>
+
+  <script>
+    // === LOGGING ===
+    var logEl = document.getElementById('debug-log');
+    function log(msg) {
+      console.log(msg);
+      if (logEl) {
+        logEl.textContent = msg + '\\n' + logEl.textContent;
+      }
+    }
+    log('=== JS LOADED ===');
+
+    // === ELEMENTS ===
+    var fileInput = document.getElementById('search-image');
+    var filePreview = document.getElementById('file-preview');
+    var searchBtn = document.getElementById('search-submit');
+    var searchStatus = document.getElementById('search-status');
+    var editorOverlay = document.getElementById('editor-overlay');
+    var editorCanvas = document.getElementById('editor-canvas');
+    var editorContainer = document.getElementById('editor-container');
+
+    log('fileInput: ' + !!fileInput);
+    log('searchBtn: ' + !!searchBtn);
+    log('editorOverlay: ' + !!editorOverlay);
+
+    // === TAB SWITCHING ===
+    function initTabs() {
+      var tabs = document.querySelectorAll('.tab');
+      var contents = document.querySelectorAll('.tab-content');
+      log('initTabs: found ' + tabs.length + ' tabs, ' + contents.length + ' contents');
+
+      tabs.forEach(function(tab, index) {
+        log('Adding listener to tab: ' + tab.textContent);
+        tab.addEventListener('click', function(e) {
+          e.preventDefault();
+          log('Tab clicked: ' + tab.textContent + ' (index ' + index + ')');
+          tabs.forEach(function(t) { t.classList.remove('active'); });
+          contents.forEach(function(c) { c.classList.remove('active'); });
+          tab.classList.add('active');
+          if (contents[index]) { contents[index].classList.add('active'); }
+          log('Tab switched to index ' + index);
+        });
+      });
+      log('initTabs COMPLETE');
+    }
+
+    // === EDITOR STATE ===
+    var editorState = { rotation: 0, scale: 1, offsetX: 0, offsetY: 0, image: null, trimMode: false };
+
+    function showEditor(file) {
+      log('showEditor: ' + file.name);
+      if (searchStatus) { searchStatus.classList.remove('hidden'); searchStatus.textContent = '編集中: ' + file.name; }
+
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var img = new Image();
+        img.onload = function() {
+          editorState = { rotation: 0, scale: 1, offsetX: 0, offsetY: 0, image: img, trimMode: false };
+          editorOverlay.classList.add('active');
+          drawEditor();
+          log('Editor opened');
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function drawEditor() {
+      if (!editorState.image) return;
+      var canvas = editorCanvas;
+      var ctx = canvas.getContext('2d');
+      var container = editorContainer;
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(canvas.width / 2 + editorState.offsetX, canvas.height / 2 + editorState.offsetY);
+      ctx.rotate(editorState.rotation * Math.PI / 180);
+      ctx.scale(editorState.scale, editorState.scale);
+      ctx.drawImage(editorState.image, -editorState.image.width / 2, -editorState.image.height / 2);
+      ctx.restore();
+    }
+
+    // Editor controls
+    document.getElementById('rotate-left').addEventListener('click', function() { editorState.rotation -= 90; drawEditor(); log('rotate -90'); });
+    document.getElementById('rotate-right').addEventListener('click', function() { editorState.rotation += 90; drawEditor(); log('rotate +90'); });
+    document.getElementById('zoom-in').addEventListener('click', function() { editorState.scale *= 1.2; drawEditor(); log('zoom in'); });
+    document.getElementById('zoom-out').addEventListener('click', function() { editorState.scale /= 1.2; drawEditor(); log('zoom out'); });
+    document.getElementById('reset').addEventListener('click', function() { editorState.rotation = 0; editorState.scale = 1; drawEditor(); log('reset'); });
+    document.getElementById('editor-done').addEventListener('click', function() {
+      editorOverlay.classList.remove('active');
+      log('Editor done');
+    });
+
+    // === FILE INPUT ===
+    if (fileInput) {
+      fileInput.addEventListener('change', function() {
+        log('fileInput change: ' + (this.files[0] ? this.files[0].name : 'null'));
+        if (this.files[0]) {
+          filePreview.textContent = this.files[0].name;
+        }
+      });
+    }
+
+    // === SEARCH BUTTON ===
+    if (searchBtn) {
+      searchBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        searchBtn.style.background = '#e74c3c';
+        log('SEARCH touchstart');
+        alert('検索ボタンがタップされました');
+        setTimeout(function(){ searchBtn.style.background = ''; }, 500);
+      }, { passive: false });
+      log('searchBtn touchstart listener attached');
+    }
+
+    // === INIT ===
+    function attachEvents() {
+      log('attachEvents called');
+      if (searchBtn && !searchBtn._listenerAttached) {
+        searchBtn.addEventListener('touchstart', function(e) {
+          e.preventDefault();
+          searchBtn.style.background = '#e74c3c';
+          log('SEARCH touchstart (attachEvents)');
+          alert('SEARCH via attachEvents');
+          if (fileInput && fileInput.files[0]) {
+            showEditor(fileInput.files[0]);
+          } else {
+            log('no file selected');
+          }
+          setTimeout(function(){ searchBtn.style.background = ''; }, 500);
+        }, { passive: false });
+        searchBtn._listenerAttached = true;
+        log('searchBtn listener attached via attachEvents');
+      }
+    }
+
+    async function initLiff() {
+      log('initLiff: START');
+      try {
+        log('initLiff: calling liff.init...');
+        await liff.init({ liffId: '2011376207-0e7oVWOT' });
+        log('initLiff: liff.init SUCCESS');
+      } catch (err) {
+        log('initLiff: liff.init ERROR: ' + err.message);
+      }
+      log('initLiff: attaching events...');
+      attachEvents();
+      log('initLiff: initTabs...');
+      initTabs();
+      log('initLiff: COMPLETE');
+    }
+
+    // Start LIFF after short delay
+    setTimeout(function() {
+      log('Starting initLiff...');
+      initLiff();
+    }, 500);
+  </script>
+</body>
+</html>

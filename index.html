@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>申請フォーム - v20250904e</title>
+  <script>window.__v="20250904c";</script>
+  <script charset="utf-8" src="/sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; padding-bottom: 20px; }
+
+    .tabs { display: flex; border-bottom: 2px solid #e0e0e0; background: #fff; position: sticky; top: 0; z-index: 10; }
+    .tab { flex: 1; padding: 14px 8px; text-align: center; cursor: pointer; border: none; background: none; font-size: 14px; color: #666; border-bottom: 3px solid transparent; -webkit-tap-highlight-color: transparent; }
+    .tab.active { color: #00b900; border-bottom-color: #00b900; font-weight: bold; }
+
+    .tab-content { display: none; padding: 16px; }
+    .tab-content.active { display: block; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: bold; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; }
+    .form-group textarea { min-height: 80px; resize: vertical; }
+
+    .btn-primary { width: 100%; padding: 14px; background: #00b900; color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .btn-primary:active { background: #00a000; }
+
+    .file-input-wrapper { border: 2px dashed #ddd; border-radius: 8px; padding: 20px; text-align: center; color: #999; }
+    .file-input-wrapper input[type="file"] { display: none; }
+    .file-label { display: block; padding: 12px; background: #00b900; color: #fff; border-radius: 6px; text-align: center; cursor: pointer; margin-top: 10px; -webkit-tap-highlight-color: transparent; }
+    .file-preview { margin-top: 10px; font-size: 14px; color: #666; }
+
+    .hidden { display: none !important; }
+
+    .debug-section { margin-top: 20px; padding: 10px; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 4px; font-size: 12px; font-family: monospace; }
+    #debug-log { max-height: 200px; overflow-y: auto; word-break: break-all; }
+
+    .editor-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 1000; display: none; flex-direction: column; }
+    .editor-overlay.active { display: flex; }
+    .editor-header { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #222; color: #fff; }
+    .editor-header button { background: #00b900; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; font-size: 14px; }
+    .editor-canvas-container { flex: 1; position: relative; overflow: hidden; background: #111; touch-action: none; }
+    .editor-controls { display: flex; gap: 8px; padding: 10px; background: #222; flex-wrap: wrap; }
+    .editor-controls button { flex: 1; background: #444; color: #fff; border: none; padding: 10px; border-radius: 4px; font-size: 13px; min-width: 70px; }
+    .editor-info { padding: 6px 10px; background: #333; color: #aaa; font-size: 12px; text-align: center; }
+
+    .schedule-calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #e0e0e0; }
+    .schedule-month-year { font-size: 18px; font-weight: bold; color: #333; }
+    .schedule-calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; max-width: 400px; margin: 0 auto; }
+    .calendar-day-header { background: #f5f5f5; padding: 8px; text-align: center; font-weight: bold; color: #666; font-size: 14px; }
+    .schedule-events-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 12px; max-width: 400px; margin: 20px auto 0; }
+    .event-item { background: #e8f5e9; border-radius: 4px; padding: 4px; margin: 2px 0; font-size: 14px; color: #2e7d32; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; border-left: 3px solid #00b900; transition: background-color 0.2s; }
+    .event-item:hover { background: #e0f2f1; }
+    .event-item.selected { background: #c8e6c9; border-left-color: #2e7d32; }
+    .calendar-day-cell { min-height: 50px; padding: 4px; vertical-align: top; }
+    .calendar-day-cell.other-month { background: #fafafa; color: #aaa; }
+    .calendar-day-cell.current-month { background: #fff; }
+    .calendar-day-number { font-size: 14px; color: #999; margin-bottom: 2px; }
+    .calendar-day-number.current-month { color: #666; font-weight: 600; }
+    .calendar-day-number.today { color: #00b900; border: 2px solid #00b900; border-radius: 50%; display: inline-block; padding: 2px 6px; }
+    .schedule-placeholder { text-align: center; color: #999; padding: 20px; font-size: 14px; }
+    .calendar-day-header.sun { color: #e53935; }
+    .calendar-day-header.sat { color: #1e88e5; }
+    .calendar-day-number.sun { color: #e53935; font-weight: bold; }
+    .calendar-day-number.sat { color: #1e88e5; font-weight: bold; }
+
+    /* Paid leave history */
+    .paid-history-item { background: #fff; border-radius: 6px; padding: 10px; margin-bottom: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); display: flex; justify-content: space-between; align-items: center; }
+    .paid-history-info { flex: 1; }
+    .paid-history-date { font-weight: bold; font-size: 14px; color: #333; }
+    .paid-history-type { font-size: 12px; color: #666; margin-top: 2px; }
+    .paid-history-reason { font-size: 12px; color: #888; margin-top: 2px; white-space: pre-wrap; }
+    .paid-history-del { background: #e74c3c; color: #fff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+
+    /* Image fullscreen overlay */
+    #img-fullscreen-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.9); z-index: 9999; display: none; align-items: center; justify-content: center; }
+    #img-fullscreen-overlay img { max-width: 95vw; max-height: 95vh; object-fit: contain; border-radius: 8px; box-shadow: 0 4px 20px rgba(255, 255, 255, 0.3); }
+    #img-fullscreen-overlay .close { position: absolute; top: 20px; right: 20px; color: #fff; font-size: 28px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム</h1>
+
+  <!-- Image fullscreen overlay -->
+  <div id="img-fullscreen-overlay">
+    <span class="close" id="img-close-btn">×</span>
+    <img id="img-fullscreen-img" src="" alt="Full size image">
+  </div>
+
+  <div class="tabs" id="tabs">
+      <button class="tab active" data-tab="overtime">残業申請</button>
+      <button class="tab" data-tab="paid">有給申請</button>
+      <button class="tab" data-tab="search">類似検索</button>
+      <button class="tab" data-tab="adjust">画像調整</button>
+    </div>
+
+  <div class="tab-content active" id="tab-overtime">
+    <!-- Calendar at TOP -->
+    <div id="overtime-calendar-section">
+      <div class="schedule-calendar-header">
+          <div class="schedule-month-year" id="overtime-month-year">年 月</div>
+          <div id="overtime-period-total" style="font-size: 16px; color: #e53935; font-weight: bold;"></div>
+          <div style="display: flex; gap: 8px;">
+              <button class="btn-primary" onclick="prevOvertimeMonth()" style="padding: 6px 12px; font-size: 14px;">←</button>
+              <button class="btn-primary" onclick="nextOvertimeMonth()" style="padding: 6px 12px; font-size: 14px;">→</button>
+          </div>
+      </div>
+      <div class="schedule-calendar-grid" id="overtime-calendar-grid">
+          <!-- Populated by JavaScript -->
+      </div>
+    </div>
+
+    <!-- Divider with label -->
+    <div style="text-align: center; margin: 12px 0; color: #999; font-size: 12px;">
+      <span style="background: #f5f5f5; padding: 0 12px;">入力エリア</span>
+    </div>
+    <div style="border-top: 1px solid #e0e0e0; margin: 8px 0;"></div>
+
+    <!-- Unified edit/form area (shown for both new entries and editing existing) -->
+    <div id="overtime-edit-form-wrapper" style="margin-top: 0;">
+      <div class="form-group">
+        <label>内容</label>
+        <input type="text" id="edit-schedule-title" placeholder="例: 案件作業">
+      </div>
+      <div class="form-group">
+        <label>日付</label>
+        <input type="date" id="edit-schedule-date">
+      </div>
+      <div class="form-group">
+        <label>開始時間</label>
+        <div style="display:flex; gap:4px;">
+          <select id="edit-schedule-start-hour" style="flex:1; padding:8px; font-size:16px;">
+            <!-- populated by JS -->
+          </select>
+          <span style="align-self:center; font-size:20px;">:</span>
+          <select id="edit-schedule-start-minute" style="flex:1; padding:8px; font-size:16px;">
+            <option value="00">00</option>
+            <option value="15">15</option>
+            <option value="30">30</option>
+            <option value="45">45</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>終了時間</label>
+        <div style="display:flex; gap:4px;">
+          <select id="edit-schedule-end-hour" style="flex:1; padding:8px; font-size:16px;">
+            <!-- populated by JS -->
+          </select>
+          <span style="align-self:center; font-size:20px;">:</span>
+          <select id="edit-schedule-end-minute" style="flex:1; padding:8px; font-size:16px;">
+            <option value="00">00</option>
+            <option value="15">15</option>
+            <option value="30">30</option>
+            <option value="45">45</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>残業時間 (0.25刻み)</label>
+        <input type="number" id="edit-schedule-hours" step="0.25" placeholder="開始・終了から自動計算" readonly style="background:#f0f0f0;">
+      </div>
+      <div class="form-group">
+        <label>備考</label>
+        <textarea id="edit-schedule-description" placeholder="備考を入力"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button class="btn-primary" id="save-edit-btn" style="flex:1;background:#00b900;">保存</button>
+        <button class="btn-primary" id="delete-edit-btn" style="flex:1;background:#e74c3c;">削除</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-paid">
+    <div class="form-group">
+      <label>日付</label>
+      <input type="date" id="paid-date">
+    </div>
+    <div class="form-group">
+      <label>種別</label>
+      <select id="paid-type">
+        <option>終日有休</option>
+        <option>午前有休</option>
+        <option>午後有休</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>理由</label>
+      <textarea id="paid-reason" placeholder="休暇理由を入力"></textarea>
+    </div>
+    <button class="btn-primary" id="paid-submit" style="margin-top: 16px;">申請</button>
+    <div id="paid-histories" style="margin-top: 20px;"></div>
+  </div>
+
+  <div class="tab-content" id="tab-search">
+    <div class="form-group">
+      <label>インデックス</label>
+      <select id="search-index">
+        <option value="main">メイン</option>
+        <option value="photo">写真</option>
+      </select>
+    </div>
+    <div class="file-input-wrapper">
+      <label style="display:block;font-size:14px;color:#666;">図面画像を選択</label>
+      <input type="file" id="search-image" accept="image/*">
+      <label for="search-image" class="file-label">📷 撮影・写真を選択</label>
+      <div class="file-preview" id="file-preview">未選択</div>
+    </div>
+    <div id="search-preview-container" class="hidden" style="margin-top:10px;position:relative;width:100%;max-width:400px;margin-left:auto;margin-right:auto;">
+      <img id="search-preview-image" style="width:100%;border-radius:8px;border:2px solid #00b900;display:block;" />
+      <div style="text-align:center;font-size:12px;color:#00b900;margin-top:4px;">✅ 編集済み画像</div>
+    </div>
+    <button class="btn-primary" id="search-submit" style="margin-top:16px;padding:16px;font-size:18px;-webkit-tap-highlight-color:transparent;">🔍 検索する</button>
+    <div id="search-status" class="hidden" style="margin-top:10px;padding:10px;background:#f0f0f0;border-radius:4px;"></div>
+    <div id="search-results" class="hidden" style="margin-top:14px;"></div>
+    <div id="original-preview-container" style="margin-top:12px;padding:8px;background:#f8f8f8;border-radius:6px;border:1px solid #e0e0e0;display:none;">
+      <div style="font-size:12px;color:#666;margin-bottom:4px;">元画像</div>
+      <img id="original-preview-img" style="width:100%;max-height:180px;object-fit:contain;background:#fff;border-radius:4px;border:1px solid #ccc;" />
+    </div>
+    <!-- Fullscreen image preview modal -->
+    <div id="image-preview-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.9);z-index:2000;justify-content:center;align-items:center;">
+      <img id="image-preview-modal-img" style="max-width:95vw;max-height:95vh;object-fit:contain;" />
+      <div id="image-preview-modal-title" style="position:absolute;top:10px;left:10px;color:#fff;font-size:14px;background:rgba(0,0,0,0.5);padding:6px 10px;border-radius:4px;"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-adjust">
+    <div class="form-group">
+      <label>画像を選択</label>
+      <input type="file" id="adjust-image" accept="image/*">
+      <label for="adjust-image" class="file-label">📷 撮影・写真を選択</label>
+      <div class="file-preview" id="adjust-preview">未選択</div>
+    </div>
+    <div class="form-group">
+      <label>アスペクト比</label>
+      <select id="adjust-aspect">
+        <option value="1.414">A4 (1:√2, 縦)</option>
+        <option value="0.707">A4 (1:√2, 横)</option>
+      </select>
+    </div>
+    <div id="adjust-canvas-container" style="position:relative;width:100%;height:300px;background:#111;border-radius:8px;overflow:hidden;touch-action:none;">
+      <canvas id="adjust-canvas" style="width:100%;height:100%;display:block;"></canvas>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+      <button class="btn-primary" id="rotate-left" style="flex:1;padding:10px;font-size:14px;">↺ -90°</button>
+      <button class="btn-primary" id="rotate-right" style="flex:1;padding:10px;font-size:14px;">↻ +90°</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+      <button class="btn-primary" id="zoom-in" style="flex:1;padding:10px;font-size:14px;">拡大</button>
+      <button class="btn-primary" id="zoom-out" style="flex:1;padding:10px;font-size:14px;">縮小</button>
+    </div>
+    <button class="btn-primary" id="adjust-apply" style="margin-top:10px;padding:14px;font-size:16px;background:#00b900;">✅ 適用して類似検索へ</button>
+    <div style="margin-top:10px;font-size:12px;color:#666;text-align:center;">指でドラッグ / ピンチで拡大縮小</div>
+  </div>
+
+  <div class="editor-overlay" id="editor-overlay" style="display:none !important;">
+    <div class="editor-header">
+      <span>画像編集（4:3 / 3:4）</span>
+      <div>
+        <button id="editor-reset">リセット</button>
+        <button id="editor-done">完了</button>
+      </div>
+    </div>
+    <div class="editor-info" id="editor-info">指でドラッグ / ピンチで拡大縮小 / 90度回転</div>
+    <div class="editor-canvas-container" id="editor-container">
+      <canvas id="editor-canvas"></canvas>
+    </div>
+    <div class="editor-controls">
+      <button id="rotate-left">↺ -90°</button>
+      <button id="rotate-right">↻ +90°</button>
+      <button id="aspect-4-3" style="background:#00b900;">4:3</button>
+      <button id="aspect-3-4" style="background:#0066cc;">3:4</button>
+      <button id="zoom-in">拡大</button>
+      <button id="zoom-out">縮小</button>
+    </div>
+  </div>
+
+  <script>
+    // === LOGGING ===
+    var logEl = document.getElementById('debug-log');
+    function log(msg, isError) {
+      console.log(msg);
+      if (logEl) {
+        logEl.textContent = msg + '\n' + logEl.textContent;
+      }
+    }
+    log('=== JS LOADED ===');
+
+    // === ELEMENTS ===
+    var fileInput = document.getElementById('search-image');
+    var filePreview = document.getElementById('file-preview');
+    var searchBtn = document.getElementById('search-submit');
+    var searchStatus = document.getElementById('search-status');
+    var editorOverlay = document.getElementById('editor-overlay');
+    var editorCanvas = document.getElementById('editor-canvas');
+    var editorContainer = document.getElementById('editor-container');
+
+    log('fileInput: ' + !!fileInput);
+    log('searchBtn: ' + !!searchBtn);
+    log('editorOverlay: ' + !!editorOverlay);
+
+    // === TAB SWITCHING ===
+    function initTabs() {
+          var tabs = document.querySelectorAll('.tab');
+          var contents = document.querySelectorAll('.tab-content');
+          log('initTabs: found ' + tabs.length + ' tabs, ' + contents.length + ' contents');
+
+          tabs.forEach(function(tab, index) {
+            function handleTabSwitch(e) {
+              if (e) { e.preventDefault(); }
+              log('Tab touched/clicked: ' + tab.textContent + ' (index ' + index + ')');
+              tabs.forEach(function(t) { t.classList.remove('active'); });
+              contents.forEach(function(c) { c.classList.remove('active'); });
+              tab.classList.add('active');
+              if (contents[index]) { contents[index].classList.add('active'); }
+              log('Tab switched to index ' + index);
+              if (tab.getAttribute('data-tab') === 'overtime') {
+                renderOvertimeCalendar();
+              }
+            }
+            tab.addEventListener('touchstart', handleTabSwitch);
+            tab.addEventListener('click', handleTabSwitch);
+            log('Tab listener added: ' + tab.textContent);
+          });
+          log('initTabs: COMPLETE');
+        }
+
+    // === EDITOR STATE ===
+    var editorState = { rotation: 0, scale: 1, offsetX: 0, offsetY: 0, image: null, aspectRatio: 4/3, trimMode: false };
+
+    function getCropRect() {
+      var canvas = document.getElementById('editor-canvas');
+      var container = document.getElementById('editor-container');
+      if (!canvas || !container || !editorState.image) return null;
+      var cw = container.clientWidth;
+      var ch = container.clientHeight;
+      var ar = editorState.aspectRatio;
+      var cropW, cropH;
+      if (cw / ch > ar) {
+        cropH = ch * 0.85;
+        cropW = cropH * ar;
+      } else {
+        cropW = cw * 0.85;
+        cropH = cropW / ar;
+      }
+      return {
+        x: (cw - cropW) / 2,
+        y: (ch - cropH) / 2,
+        w: cropW,
+        h: cropH,
+        cx: cw / 2,
+        cy: ch / 2
+      };
+    }
+
+    function drawEditor() {
+      if (!editorState.image) return;
+      var canvas = document.getElementById('editor-canvas');
+      var ctx = canvas.getContext('2d');
+      var container = document.getElementById('editor-container');
+      if (!canvas || !ctx || !container) return;
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      var cw = canvas.width;
+      var ch = canvas.height;
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.save();
+      var crop = getCropRect();
+      if (crop) {
+        ctx.translate(crop.cx + editorState.offsetX, crop.cy + editorState.offsetY);
+      } else {
+        ctx.translate(cw / 2 + editorState.offsetX, ch / 2 + editorState.offsetY);
+      }
+      ctx.rotate(editorState.rotation * Math.PI / 180);
+      ctx.scale(editorState.scale, editorState.scale);
+      ctx.drawImage(editorState.image, -editorState.image.width / 2, -editorState.image.height / 2);
+      ctx.restore();
+      if (crop) {
+        ctx.strokeStyle = '#00b900';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(crop.x, crop.y, crop.w, crop.h);
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.fillRect(0, 0, cw, crop.y);
+        ctx.fillRect(0, crop.y + crop.h, cw, ch - crop.y - crop.h);
+        ctx.fillRect(0, crop.y, crop.x, crop.h);
+        ctx.fillRect(crop.x + crop.w, crop.y, cw - crop.x - crop.w, crop.h);
+      }
+    }
+
+    function showEditor(file) {
+      log('showEditor: ' + file.name);
+      if (searchStatus) { searchStatus.classList.remove('hidden'); searchStatus.textContent = '編集中: ' + file.name; }
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var img = new Image();
+        img.onload = function() {
+          editorState = { rotation: 0, scale: 1, offsetX: 0, offsetY: 0, image: img, aspectRatio: 4/3, trimMode: false };
+          if (editorOverlay) editorOverlay.classList.add('active');
+          setTimeout(function() { drawEditor(); }, 100);
+          log('Editor opened');
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // === EDITOR CONTROLS ===
+    document.getElementById('rotate-left').addEventListener('click', function() {
+      editorState.rotation -= 90;
+      drawEditor();
+      log('rotate -90');
+    });
+    document.getElementById('rotate-right').addEventListener('click', function() {
+      editorState.rotation += 90;
+      drawEditor();
+      log('rotate +90');
+    });
+    document.getElementById('zoom-in').addEventListener('click', function() {
+      editorState.scale *= 1.15;
+      drawEditor();
+      log('zoom in');
+    });
+    document.getElementById('zoom-out').addEventListener('click', function() {
+      editorState.scale /= 1.15;
+      drawEditor();
+      log('zoom out');
+    });
+    document.getElementById('aspect-4-3').addEventListener('click', function() {
+      editorState.aspectRatio = 4/3;
+      drawEditor();
+      log('aspect 4:3');
+    });
+    document.getElementById('aspect-3-4').addEventListener('click', function() {
+      editorState.aspectRatio = 3/4;
+      drawEditor();
+      log('aspect 3:4');
+    });
+    document.getElementById('editor-done').addEventListener('click', function() {
+      if (editorOverlay) editorOverlay.classList.remove('active');
+      log('Editor done');
+    });
+
+    // === APPLY BUTTON ===
+    (function() {
+      var btn = document.getElementById('adjust-apply');
+      if (btn) {
+        btn.type = 'button';
+        function applyOnce(e) {
+          e.preventDefault();
+          try {
+            if (!adjustImage || !adjustCanvas || !adjustState) {
+              log('Apply cancelled: no image loaded');
+              return;
+            }
+            // Compute crop in screen space (canvas pixels)
+            var canvas = adjustCanvas;
+            var cw = canvas.width;
+            var ch = canvas.height;
+            var ar = adjustState.aspectRatio;
+            var cropW = 0, cropH = 0;
+            if (cw / ch > ar) {
+              cropH = ch * 0.85;
+              cropW = cropH * ar;
+            } else {
+              cropW = cw * 0.85;
+              cropH = cropW / ar;
+            }
+            // Center of crop in screen space (accounting for zoom+pan)
+            // The image is drawn at scale with offset, centered at canvas center
+            // screenX = (imageX * scale + cx * scale + offsetX) ... reverse
+            // Actually: drawImage translates to (cx + offsetX, cy + offsetY), scales, rotates
+            // Image is drawn centered at origin within translated/rotated coords
+            // For simplicity with no rotation:
+            var cx = cw / 2;  // center of canvas
+            var cy = ch / 2;
+            // Crop rect (top-left + size) in screen space, BEFORE zoom/pan
+            // But zoom/pan affects where image pixels map to screen
+            // Image is drawn centered at (cx + offsetX, cy + offsetY) with scale
+            // So: screenX = imageX * scale + (cx + offsetX)
+            // Reverse: imageX = (screenX - cx - offsetX) / scale
+            // Crop rect in screen space (centered on canvas center, BEFORE offset)
+            var cropScreenX = cx - cropW / 2;
+            var cropScreenY = cy - cropH / 2;
+            // Convert to image space
+            var scale = adjustState.scale;
+            var cropImgX = (cropScreenX - adjustState.offsetX) / scale;
+            var cropImgY = (cropScreenY - adjustState.offsetY) / scale;
+            var cropImgW = cropW / scale;
+            var cropImgH = cropH / scale;
+            // Clamp to image bounds
+            cropImgX = Math.max(0, Math.min(adjustImage.width - cropImgW, cropImgX));
+            cropImgY = Math.max(0, Math.min(adjustImage.height - cropImgH, cropImgY));
+            cropImgW = Math.min(cropImgW, adjustImage.width - cropImgX);
+            cropImgH = Math.min(cropImgH, adjustImage.height - cropImgY);
+            
+            log('Apply: original=' + adjustImage.width + 'x' + adjustImage.height + 
+                ' crop=' + Math.round(cropImgW) + 'x' + Math.round(cropImgH) + ' at (' + Math.round(cropImgX) + ',' + Math.round(cropImgY) + ')');
+            
+            // Output at ORIGINAL resolution
+            var outCanvas = document.createElement('canvas');
+            var ow = adjustImage.width;
+            var oh = adjustImage.height;
+            // Keep A4 aspect ratio
+            var outW, outH;
+            if (ow / oh > ar) {
+              // Image is wider - width limited
+              outW = cropImgW;
+              outH = cropImgW / ar;
+            } else {
+              outH = cropImgH;
+              outW = cropImgH * ar;
+            }
+            outCanvas.width = cropImgW;
+            outCanvas.height = cropImgH;
+            var outCtx = outCanvas.getContext('2d');
+            outCtx.drawImage(adjustImage, cropImgX, cropImgY, cropImgW, cropImgH, 0, 0, cropImgW, cropImgH);
+            
+            outCanvas.toBlob(function(blob) {
+              if (!blob) {
+                log('Apply error: output canvas toBlob failed');
+                return;
+              }
+              var reader = new FileReader();
+              reader.onload = function(ev) {
+                window.adjustedImageDataUrl = ev.target.result;
+                window.adjustedFileName = window.adjustedFileName || 'adjusted_image.jpg';
+                var preview = document.getElementById('search-preview-image');
+                if (preview) {
+                  preview.src = ev.target.result;
+                  preview.classList.remove('hidden');
+                }
+                var label = document.getElementById('adjusted-file-name');
+                if (label) {
+                  label.textContent = '適用済: ' + window.adjustedFileName;
+                  label.classList.remove('hidden');
+                }
+                log('Applied: ' + window.adjustedFileName);
+                // Switch to search tab
+                var tabs = document.querySelectorAll('.tab');
+                var contents = document.querySelectorAll('.tab-content');
+                for (var i = 0; i < tabs.length; i++) {
+                  tabs[i].classList.remove('active');
+                }
+                for (var j = 0; j < contents.length; j++) {
+                  contents[j].classList.remove('active');
+                }
+                for (var k = 0; k < tabs.length; k++) {
+                  if (tabs[k].getAttribute('data-tab') === 'search') {
+                    tabs[k].classList.add('active');
+                    var targetContent = document.getElementById('tab-search');
+                    if (targetContent) {
+                      targetContent.classList.add('active');
+                      targetContent.classList.remove('hidden');
+                    }
+                    // Also click the tab to trigger any other handlers
+                    tabs[k].click();
+                    break;
+                  }
+                }
+                log('Switched to search tab');
+                // Ensure preview container and image are visible
+                var previewContainer = document.getElementById('search-preview-container');
+                var previewImage = document.getElementById('search-preview-image');
+                if (previewContainer) {
+                  previewContainer.classList.remove('hidden');
+                  previewContainer.style.display = 'block';
+                  if (previewImage) {
+                    previewImage.src = window.adjustedImageDataUrl;
+                    previewImage.classList.remove('hidden');
+                    log('Preview container shown');
+                  }
+                }
+              };
+              reader.readAsDataURL(blob);
+            }, 'image/jpeg', 0.92);
+          } catch (err) {
+            log('Apply error: ' + (err && err.message ? err.message : String(err)), true);
+          }
+        }
+        btn.addEventListener('touchstart', applyOnce, { passive: false });
+        btn.addEventListener('click', applyOnce);
+        log('adjust-apply listener (touchstart+click) attached');
+      }
+    })();
+
+    // === PINCH ZOOM & DRAG (editor overlay) ===
+    (function() {
+      var container = document.getElementById('editor-container');
+      if (!container) return;
+      var lastDist = 0;
+      var lastX = 0, lastY = 0;
+      var dragging = false;
+      container.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 2) {
+          e.preventDefault();
+          var dx = e.touches[0].clientX - e.touches[1].clientX;
+          var dy = e.touches[0].clientY - e.touches[1].clientY;
+          lastDist = Math.sqrt(dx * dx + dy * dy);
+        } else if (e.touches.length === 1) {
+          dragging = true;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+        }
+      }, { passive: false });
+      container.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        if (e.touches.length === 2) {
+          var dx = e.touches[0].clientX - e.touches[1].clientX;
+          var dy = e.touches[0].clientY - e.touches[1].clientY;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          if (lastDist > 0) {
+            var scale = dist / lastDist;
+            editorState.scale *= scale;
+            drawEditor();
+          }
+          lastDist = dist;
+        } else if (e.touches.length === 1 && dragging) {
+          var moveX = e.touches[0].clientX - lastX;
+          var moveY = e.touches[0].clientY - lastY;
+          editorState.offsetX += moveX;
+          editorState.offsetY += moveY;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+          drawEditor();
+        }
+      }, { passive: false });
+      container.addEventListener('touchend', function() {
+        lastDist = 0;
+        dragging = false;
+      });
+    })();
+
+    // === IMAGE ADJUST TAB ===
+    var adjustFileInput = document.getElementById('adjust-image');
+    var adjustPreview = document.getElementById('adjust-preview');
+    var adjustCanvas = document.getElementById('adjust-canvas');
+    var adjustContainer = document.getElementById('adjust-canvas-container');
+    var adjustCtx = null;
+    var adjustImage = null;
+    var adjustState = { rotation: 0, scale: 1, offsetX: 0, offsetY: 0, aspectRatio: 1.414 };
+
+    function drawAdjustCanvas() {
+      if (!adjustImage || !adjustCtx || !adjustContainer) return;
+      var canvas = adjustCanvas;
+      var ctx = adjustCtx;
+      var container = adjustContainer;
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      var cw = canvas.width;
+      var ch = canvas.height;
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.save();
+      var ar = adjustState.aspectRatio;
+      var cropW = 0, cropH = 0;
+      if (cw / ch > ar) {
+        cropH = ch * 0.85;
+        cropW = cropH * ar;
+      } else {
+        cropW = cw * 0.85;
+        cropH = cropW / ar;
+      }
+      // Auto-scale image to fit canvas on first load
+      if (adjustState.isFitted === undefined || adjustState.isFitted === false) {
+        var iw = adjustImage.width;
+        var ih = adjustImage.height;
+        var fitScale = Math.min(cw / iw, ch / ih, 1);
+        // Scale to fit with some padding
+        adjustState.scale = Math.min(fitScale, 0.8);
+        adjustState.isFitted = true;
+      }
+      var cx = cw / 2 + adjustState.offsetX;
+      var cy = ch / 2 + adjustState.offsetY;
+      ctx.translate(cx, cy);
+      ctx.rotate(adjustState.rotation * Math.PI / 180);
+      ctx.scale(adjustState.scale, adjustState.scale);
+      ctx.drawImage(adjustImage, -adjustImage.width / 2, -adjustImage.height / 2);
+      ctx.restore();
+      ctx.strokeStyle = '#00b900';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect((cw - cropW) / 2, (ch - cropH) / 2, cropW, cropH);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.fillRect(0, 0, cw, (ch - cropH) / 2);
+      ctx.fillRect(0, (ch + cropH) / 2, cw, ch - (ch + cropH) / 2);
+      ctx.fillRect(0, (ch - cropH) / 2, (cw - cropW) / 2, cropH);
+      ctx.fillRect((cw + cropW) / 2, (ch - cropH) / 2, cw - (cw + cropW) / 2, cropH);
+    }
+
+    if (adjustFileInput) {
+      adjustFileInput.addEventListener('change', function() {
+        log('adjust change: ' + (this.files[0] ? this.files[0].name : 'null'));
+        if (this.files[0]) {
+          if (adjustPreview) adjustPreview.textContent = this.files[0].name;
+          var reader = new FileReader();
+          reader.onload = function(e) {
+            var img = new Image();
+            img.onload = function() {
+              adjustImage = img;
+              adjustState = { rotation: 0, scale: 1, offsetX: 0, offsetY: 0, aspectRatio: 1.414, isFitted: false };
+              if (!adjustCtx && adjustCanvas) {
+                adjustCtx = adjustCanvas.getContext('2d');
+              }
+              drawAdjustCanvas();
+              log('Adjust canvas loaded');
+            };
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(this.files[0]);
+        }
+      });
+      log('adjustFileInput listener attached');
+    }
+
+    document.getElementById('rotate-left').addEventListener('click', function() {
+      adjustState.rotation -= 90;
+      drawAdjustCanvas();
+      log('adjust rotate -90');
+    });
+    document.getElementById('rotate-right').addEventListener('click', function() {
+      adjustState.rotation += 90;
+      drawAdjustCanvas();
+      log('adjust rotate +90');
+    });
+    document.getElementById('zoom-in').addEventListener('click', function() {
+      adjustState.scale *= 1.15;
+      drawAdjustCanvas();
+      log('adjust zoom in');
+    });
+    document.getElementById('zoom-out').addEventListener('click', function() {
+      adjustState.scale /= 1.15;
+      drawAdjustCanvas();
+      log('adjust zoom out');
+    });
+    document.getElementById('adjust-aspect').addEventListener('change', function() {
+      adjustState.aspectRatio = eval(this.value);
+      drawAdjustCanvas();
+      log('adjust aspect: ' + this.value);
+    });
+
+    if (adjustContainer) {
+      var lastDist = 0, lastX = 0, lastY = 0, adjDragging = false;
+      adjustContainer.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 2) {
+          e.preventDefault();
+          var dx = e.touches[0].clientX - e.touches[1].clientX;
+          var dy = e.touches[0].clientY - e.touches[1].clientY;
+          lastDist = Math.sqrt(dx * dx + dy * dy);
+        } else if (e.touches.length === 1) {
+          adjDragging = true;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+        }
+      }, { passive: false });
+      adjustContainer.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        if (e.touches.length === 2) {
+          var dx = e.touches[0].clientX - e.touches[1].clientX;
+          var dy = e.touches[0].clientY - e.touches[1].clientY;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          if (lastDist > 0) {
+            adjustState.scale *= dist / lastDist;
+            drawAdjustCanvas();
+          }
+          lastDist = dist;
+        } else if (e.touches.length === 1 && adjDragging) {
+          adjustState.offsetX += e.touches[0].clientX - lastX;
+          adjustState.offsetY += e.touches[0].clientY - lastY;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+          drawAdjustCanvas();
+        }
+      }, { passive: false });
+      adjustContainer.addEventListener('touchend', function() {
+        lastDist = 0;
+        adjDragging = false;
+      });
+    }
+
+    // === IMAGE PREVIEW MODAL ===
+    function showImagePreview(src, name) {
+        var modal = document.getElementById("image-preview-modal");
+        var modalImg = document.getElementById("image-preview-modal-img");
+        var modalTitle = document.getElementById("image-preview-modal-title");
+        if (modal && modalImg) {
+            modalImg.src = src;
+            modalImg.alt = name;
+            if (modalTitle) modalTitle.textContent = name;
+            modal.style.display = "flex";
+        }
+    }
+
+    // Close modal on tap/click
+    var previewModal = document.getElementById("image-preview-modal");
+    if (previewModal) {
+        previewModal.onclick = function() {
+            this.style.display = "none";
+            var img = document.getElementById("image-preview-modal-img");
+            if (img) img.src = "";
+        };
+    }
+
+    // === FILE INPUT ===
+    if (fileInput) {
+      fileInput.addEventListener('change', function() {
+        log('fileInput change: ' + (this.files[0] ? this.files[0].name : 'null'));
+        if (this.files[0]) {
+          if (filePreview) filePreview.textContent = this.files[0].name;
+          // Switch to adjust tab and load image there
+          adjustFileInput.files = this.files;
+          adjustFileInput.dispatchEvent(new Event('change'));
+          // Switch tab to adjust
+          var tabs = document.querySelectorAll('.tab');
+          var contents = document.querySelectorAll('.tab-content');
+          tabs.forEach(function(t) { t.classList.remove('active'); });
+          contents.forEach(function(c) { c.classList.remove('active'); });
+          var adjustTab = document.querySelector('[data-tab="adjust"]');
+          var adjustContent = document.getElementById('tab-adjust');
+          if (adjustTab) adjustTab.classList.add('active');
+          if (adjustContent) adjustContent.classList.add('active');
+          log('Switched to adjust tab');
+        }
+      });
+      log('fileInput listener attached');
+    } else {
+      log('fileInput NOT FOUND', true);
+    }
+
+    // === PAID LEAVE HISTORY ===
+    var paidHistories = [];
+
+    function loadPaidHistories() {
+        var histories = JSON.parse(localStorage.getItem('paidHistories') || '[]');
+        paidHistories = histories;
+        renderPaidHistories();
+    }
+
+    function savePaidHistories() {
+        localStorage.setItem('paidHistories', JSON.stringify(paidHistories));
+        renderPaidHistories();
+    }
+
+    function renderPaidHistories() {
+        var historiesDiv = document.getElementById('paid-histories');
+        if (!historiesDiv) return;
+        if (paidHistories.length === 0) {
+            historiesDiv.innerHTML = '<div style="color:#999;font-size:13px;text-align:center;padding:10px;">履歴がありません</div>';
+            return;
+        }
+        historiesDiv.innerHTML = '';
+        paidHistories.slice().reverse().forEach(function(h, idx) {
+            var item = document.createElement('div');
+            item.className = 'paid-history-item';
+            var info = document.createElement('div');
+            info.className = 'paid-history-info';
+            var dateEl = document.createElement('div');
+            dateEl.className = 'paid-history-date';
+            dateEl.textContent = h.date;
+            info.appendChild(dateEl);
+            var typeEl = document.createElement('div');
+            typeEl.className = 'paid-history-type';
+            typeEl.textContent = h.type;
+            info.appendChild(typeEl);
+            if (h.reason) {
+                var reasonEl = document.createElement('div');
+                reasonEl.className = 'paid-history-reason';
+                reasonEl.textContent = h.reason;
+                info.appendChild(reasonEl);
+            }
+            var delBtn = document.createElement('button');
+            delBtn.className = 'paid-history-del';
+            delBtn.textContent = '削除';
+            delBtn.onclick = function(e) {
+                if (confirm('削除しますか？')) {
+                    paidHistories.splice(paidHistories.length - 1 - idx, 1);
+                    savePaidHistories();
+                }
+            };
+            item.appendChild(info);
+            item.appendChild(delBtn);
+            historiesDiv.appendChild(item);
+        });
+    }
+
+    var paidSubmitBtn = document.getElementById('paid-submit');
+    if (paidSubmitBtn) {
+        paidSubmitBtn.onclick = function() {
+            var date = document.getElementById('paid-date').value;
+            var type = document.getElementById('paid-type').value;
+            var reason = document.getElementById('paid-reason').value.trim();
+            if (!date) { alert('日付を選択してください'); return; }
+            paidHistories.push({ date: date, type: type, reason: reason });
+            savePaidHistories();
+            alert('有休申請を送信しました');
+            // Clear form
+            document.getElementById('paid-date').value = '';
+            document.getElementById('paid-reason').value = '';
+        };
+    }
+
+    // === ORIGINAL IMAGE PREVIEW ===
+    var originalPreviewImg = document.getElementById('original-preview-img');
+    var originalPreviewContainer = document.getElementById('original-preview-container');
+
+    function showOriginalPreview(dataUrl, fileName) {
+      if (originalPreviewImg && originalPreviewContainer) {
+        originalPreviewImg.src = dataUrl;
+        originalPreviewImg.onload = function() {
+          originalPreviewContainer.style.display = 'block';
+          log('Original preview shown: ' + (fileName || 'image'));
+        };
+      }
+    }
+
+    // === SEARCH BUTTON ===
+    if (searchBtn) {
+      searchBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        if (searchBtn.dataset.searching === 'true') {
+          log('Search already in progress, ignoring tap');
+          return;
+        }
+        searchBtn.dataset.searching = 'true';
+        searchBtn.style.background = '#95a5a6';
+        searchBtn.textContent = '検索中…';
+        log('SEARCH touchstart');
+        if (window.adjustedImageDataUrl) {
+          log('Using adjusted image for search');
+          // Send the adjusted image to search API
+          var formData = new FormData();
+          var blob = dataURLtoBlob(window.adjustedImageDataUrl);
+          formData.append('image', blob, 'adjusted_image.jpg');
+          formData.append('index', document.getElementById('search-index').value);
+
+          fetch('/search', {
+            method: 'POST',
+            body: formData
+          }).then(function(res) {
+            return res.json();
+          }).then(function(data) {
+            // Reset search button
+            searchBtn.dataset.searching = 'false';
+            searchBtn.style.background = '';
+            searchBtn.textContent = '検索する';
+            log('Search results: ' + JSON.stringify(data).substring(0, 200));
+            log('Search results: ' + JSON.stringify(data).substring(0, 200));
+            log('Search results: ' + JSON.stringify(data).substring(0, 200));
+            if (data && data.results && Array.isArray(data.results) && data.results.length) {
+              var resultsDiv = document.getElementById('search-results');
+              if (resultsDiv) {
+                // 既存結果をクリア
+                resultsDiv.innerHTML = '';
+                resultsDiv.classList.remove('hidden');
+                var header = document.createElement('div');
+                header.style.cssText = 'font-weight:bold;margin-bottom:6px;font-size:14px;';
+                header.textContent = '検索結果: ' + data.results.length + '件';
+                resultsDiv.appendChild(header);
+                for (var i = 0; i < data.results.length; i++) {
+                  (function(r) {
+                    var item = document.createElement('div');
+                    item.style.cssText = 'background:#fff;border-radius:6px;padding:8px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,0.08);overflow:hidden;';
+                    var row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+                    var img = document.createElement('img');
+                    var src = '';
+                    if (r.image_url) src = 'https://192.168.1.192:8765' + r.image_url;
+                    else if (r.path) src = 'https://192.168.1.192:8765/search-images/fallback.png';
+                    img.src = src;
+                    img.style.cssText = 'width:120px;height:90px;object-fit:contain;border-radius:4px;background:#fafafa;border:1px solid #ddd;cursor:pointer;';
+                    img.alt = r.name || 'result';
+                    img.onclick = function(e) {
+                        e.stopPropagation();
+                        showImagePreview(src, r.name || 'result');
+                    };
+                    var info = document.createElement('div');
+                    info.style.cssText = 'flex:1;min-width:0;';
+                    var nameEl = document.createElement('div');
+                    nameEl.style.cssText = 'font-weight:bold;font-size:13px;color:#2a2a2a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+                    nameEl.textContent = r.name || 'result';
+                    var simEl = document.createElement('div');
+                    simEl.style.cssText = 'font-size:11px;color:#888;';
+                    simEl.textContent = '類似度: ' + (r.similarity != null && r.similarity !== undefined ? r.similarity.toFixed(4) : 'N/A');
+                    info.appendChild(nameEl);
+                    info.appendChild(simEl);
+                    row.appendChild(img);
+                    row.appendChild(info);
+                    item.appendChild(row);
+                    resultsDiv.appendChild(item);
+                  })(data.results[i]);
+                }
+                log('Search results rendered: ' + data.results.length + ' items');
+              }
+            } else {
+              var fallbackDiv = document.getElementById('search-results');
+              if (fallbackDiv) {
+                fallbackDiv.innerHTML = '検索結果がありませんでした。';
+                fallbackDiv.classList.remove('hidden');
+              }
+            }
+          }).catch(function(err) {
+            searchBtn.dataset.searching = 'false';
+            searchBtn.style.background = '';
+            searchBtn.textContent = '検索する';
+            log('Search error: ' + err.message, true);
+          });
+        } else {
+          alert('画像を選択してください');
+          searchBtn.dataset.searching = 'false';
+          searchBtn.style.background = '';
+          searchBtn.textContent = '検索する';
+        }
+      }, { passive: false });
+      log('searchBtn touchstart listener attached');
+    }
+
+    function dataURLtoBlob(dataurl) {
+      var arr = dataurl.split(',');
+      var mime = arr[0].match(/:(.*?);/)[1];
+      var bstr = atob(arr[1]);
+      var n = bstr.length;
+      var u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      return new Blob([u8arr], { type: mime });
+    }
+
+    // === OVERTIME CALENDAR FUNCTIONS ===
+    var overtimeDate = new Date();
+    var allSchedules = [];
+
+    function calcOvertimeHours(start, end) {
+        // start/end like "09:00" → decimal hours at 0.25 increments (15 min)
+        if (!start || !end) return "";
+        var [sh, sm] = start.split(":").map(Number);
+        var [eh, em] = end.split(":").map(Number);
+        var totalMin = (eh * 60 + em) - (sh * 60 + sm);
+        if (totalMin <= 0) totalMin += 24 * 60; // overnight
+        // Round to nearest 0.25 (15 min)
+        var quarterHours = Math.round(totalMin / 15);
+        var decimal = quarterHours * 0.25;
+        return decimal.toFixed(2);
+    }
+
+    function updateEditOvertimeHours() {
+        var start = getStartEndValue("edit-schedule-start");
+        var end = getStartEndValue("edit-schedule-end");
+        var hoursField = document.getElementById("edit-schedule-hours");
+        if (hoursField) hoursField.value = calcOvertimeHours(start, end);
+    }
+
+    function getStartEndValue(prefix) {
+        var h = document.getElementById(prefix + "-hour");
+        var m = document.getElementById(prefix + "-minute");
+        if (h && m) {
+            return h.value + ":" + m.value;
+        }
+        return "";
+    }
+
+    function populateHourOptions(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.innerHTML = "";
+        for (var h = 0; h <= 8; h++) {
+            var opt = document.createElement("option");
+            opt.value = h.toString().padStart(2, "0");
+            opt.textContent = h.toString();
+            el.appendChild(opt);
+        }
+        for (var h2 = 17; h2 <= 23; h2++) {
+            var opt2 = document.createElement("option");
+            opt2.value = h2.toString().padStart(2, "0");
+            opt2.textContent = h2.toString();
+            el.appendChild(opt2);
+        }
+    }
+
+    // Populate hour selects
+    populateHourOptions("edit-schedule-start-hour");
+    populateHourOptions("edit-schedule-end-hour");
+
+    // Auto-calculate hours when start/end changes
+    ["edit-schedule-start-hour", "edit-schedule-start-minute", "edit-schedule-end-hour", "edit-schedule-end-minute"].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.addEventListener("change", updateEditOvertimeHours);
+            el.addEventListener("touchstart", updateEditOvertimeHours);
+            el.addEventListener("click", updateEditOvertimeHours);
+        }
+    });
+
+    function renderOvertimeCalendar() {
+        var year = overtimeDate.getFullYear();
+        var month = overtimeDate.getMonth();
+        var monthNames = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+        var monthYearEl = document.getElementById("overtime-month-year");
+        if (monthYearEl) {
+            monthYearEl.textContent = year + "年" + monthNames[month];
+        }
+
+        // Display period total (16th of prev month to 15th of current month)
+        var periodTotalEl = document.getElementById("overtime-period-total");
+        if (periodTotalEl) {
+            var periodHours = calcPeriodTotal(year, month);
+            var prevMonth = month === 0 ? 12 : month;
+            periodTotalEl.textContent = prevMonth + "/16～" + (month + 1) + "/15の合計: " + periodHours.toFixed(2) + "h";
+        }
+
+        loadSchedules(function() {
+            drawOvertimeCalendar(year, month);
+        });
+    }
+
+    function calcPeriodTotal(year, month) {
+        // Period: 16th of previous month to 15th of current month
+        var startPrevYear, startPrevMonth;
+        if (month === 0) {
+            startPrevYear = year - 1;
+            startPrevMonth = 11;
+        } else {
+            startPrevYear = year;
+            startPrevMonth = month - 1;
+        }
+        // Range: from (startPrevMonth 16) to (current month 15)
+        var periodStart = startPrevYear + "-" + (startPrevMonth + 1).toString().padStart(2, "0") + "-16";
+        var periodEnd = year + "-" + (month + 1).toString().padStart(2, "0") + "-15";
+        var total = 0;
+        allSchedules.forEach(function(s) {
+            if (s.date >= periodStart && s.date <= periodEnd) {
+                var hoursText = s.time || "";
+                var entryHours = 0;
+                if (hoursText.includes("-")) {
+                    var tParts = hoursText.split("-");
+                    if (tParts.length === 2) {
+                        var calc = calcOvertimeHours(tParts[0], tParts[1]);
+                        entryHours = parseFloat(calc) || 0;
+                    }
+                } else {
+                    var hMatch = hoursText.match(/(\d+(\.\d+)?)/);
+                    if (hMatch) entryHours = parseFloat(hMatch[1]);
+                }
+                total += entryHours;
+            }
+        });
+        return total;
+    }
+
+    function drawOvertimeCalendar(year, month) {
+        var calendarGrid = document.getElementById("overtime-calendar-grid");
+        if (!calendarGrid) return;
+
+        // Group schedules by day
+        var schedulesByDay = {};
+        allSchedules.forEach(function(s) {
+            var parts = s.date.split("-");
+            if (parts.length >= 3) {
+                var sYear = parseInt(parts[0]);
+                var sMonth = parseInt(parts[1]) - 1;
+                var sDay = parseInt(parts[2]);
+                if (sYear === year && sMonth === month) {
+                    if (!schedulesByDay[sDay]) schedulesByDay[sDay] = [];
+                    schedulesByDay[sDay].push(s);
+                }
+            }
+        });
+
+        calendarGrid.innerHTML = "";
+
+        // Day headers
+        var dayHeaders = ["日", "月", "火", "水", "木", "金", "土"];
+        dayHeaders.forEach(function(day, idx) {
+            var div = document.createElement("div");
+            div.className = "calendar-day-header";
+            div.textContent = day;
+            if (idx === 0) div.classList.add("sun");
+            if (idx === 6) div.classList.add("sat");
+            calendarGrid.appendChild(div);
+        });
+
+        var firstDay = new Date(year, month, 1).getDay();
+        var lastDate = new Date(year, month + 1, 0).getDate();
+
+        for (var i = 0; i < firstDay; i++) {
+            var emptyDiv = document.createElement("div");
+            emptyDiv.style.cssText = "padding: 4px; font-size: 10px; color: #ccc;";
+            calendarGrid.appendChild(emptyDiv);
+        }
+
+        var today = new Date();
+        for (var day = 1; day <= lastDate; day++) {
+            var dayDiv = document.createElement("div");
+            dayDiv.style.cssText = "padding: 2px; font-size: 10px; text-align: center; border-radius: 4px; margin: 1px 0; min-width: 32px; min-height: 32px; position: relative;";
+
+            var dayLabel = document.createElement("div");
+            dayLabel.textContent = day;
+            dayLabel.style.cssText = "font-weight: bold; color: #333;";
+            var dayOfWeek = (firstDay + day - 1) % 7;
+            if (dayOfWeek === 0) {
+                dayLabel.classList.add("sun");
+                dayLabel.style.color = "#e53935";
+            } else if (dayOfWeek === 6) {
+                dayLabel.classList.add("sat");
+                dayLabel.style.color = "#1e88e5";
+            }
+
+            // Highlight today
+            if (year === today.getFullYear() && month === today.getMonth() && day === today.getDate()) {
+                dayLabel.classList.add("today");
+                dayLabel.style.cssText = "font-weight: bold; color: #00b900; border: 2px solid #00b900; border-radius: 50%; display: inline-block; padding: 2px 6px;";
+            }
+
+            // Click day → show inline edit form for new overtime entry
+            dayLabel.onclick = function(e) {
+                e.stopPropagation();
+                var dayNum = parseInt(this.textContent);
+                if (isNaN(dayNum)) return;
+                var dateStr = year + "-" + (month + 1).toString().padStart(2, "0") + "-" + dayNum.toString().padStart(2, "0");
+                currentEditId = null;
+                document.getElementById("edit-schedule-title").value = "";
+                document.getElementById("edit-schedule-date").value = dateStr;
+                document.getElementById("edit-schedule-start-hour").value = "17";
+                document.getElementById("edit-schedule-start-minute").value = "00";
+                document.getElementById("edit-schedule-end-hour").value = "";
+                document.getElementById("edit-schedule-end-minute").value = "00";
+                document.getElementById("edit-schedule-hours").value = "";
+                document.getElementById("edit-schedule-description").value = "";
+                log("New overtime entry for date: " + dateStr);
+            };
+            dayDiv.appendChild(dayLabel);
+
+            // Add overtime entries for this day
+            if (schedulesByDay[day]) {
+                schedulesByDay[day].forEach(function(s) {
+                    var eventEl = document.createElement("div");
+                    eventEl.className = "event-item";
+                    var hoursText = s.time || "";
+                    // Calculate hours for display
+                    var entryHours = 0;
+                    if (hoursText.includes("-")) {
+                        var tParts = hoursText.split("-");
+                        if (tParts.length === 2) {
+                            entryHours = parseFloat(calcOvertimeHours(tParts[0], tParts[1])) || 0;
+                        }
+                    } else {
+                        var hMatch = hoursText.match(/(\d+(\.\d+)?)/);
+                        if (hMatch) entryHours = parseFloat(hMatch[1]);
+                    }
+                    eventEl.textContent = entryHours.toFixed(2);
+                    eventEl.title = s.title + (s.time ? " | " + s.time : "") + (s.description ? "\n" + s.description : "");
+                    eventEl.style.cursor = "pointer";
+                    eventEl.onclick = function(e) {
+                        e.stopPropagation();
+                        showOvertimeEditForm(s);
+                        log("Selected overtime entry for edit: " + s.title);
+                    };
+                    dayDiv.appendChild(eventEl);
+                });
+            }
+
+            calendarGrid.appendChild(dayDiv);
+        }
+    }
+
+    var currentEditId = null;
+
+    function showOvertimeEditForm(s) {
+        currentEditId = s.id;
+        log('showOvertimeEditForm: showing inline form for ' + s.title);
+        document.getElementById("edit-schedule-title").value = s.title || "";
+        document.getElementById("edit-schedule-date").value = s.date || "";
+        // time field stores "start-end" format or decimal hours; parse both
+        var timeVal = s.time || "";
+        var hoursEl = document.getElementById("edit-schedule-hours");
+
+        if (timeVal.includes("-")) {
+            var parts = timeVal.split("-");
+            if (parts.length === 2) {
+                // Parse "HH:MM" into separate hour/minute selects
+                if (parts[0].includes(":")) {
+                    var startParts = parts[0].split(":");
+                    document.getElementById("edit-schedule-start-hour").value = startParts[0];
+                    document.getElementById("edit-schedule-start-minute").value = startParts[1] || "00";
+                }
+                if (parts[1].includes(":")) {
+                    var endParts = parts[1].split(":");
+                    document.getElementById("edit-schedule-end-hour").value = endParts[0];
+                    document.getElementById("edit-schedule-end-minute").value = endParts[1] || "00";
+                }
+                if (hoursEl) hoursEl.value = calcOvertimeHours(parts[0], parts[1]);
+            }
+        } else {
+            document.getElementById("edit-schedule-start-hour").value = "";
+            document.getElementById("edit-schedule-start-minute").value = "00";
+            document.getElementById("edit-schedule-end-hour").value = "";
+            document.getElementById("edit-schedule-end-minute").value = "00";
+            if (hoursEl) hoursEl.value = timeVal;
+        }
+        document.getElementById("edit-schedule-description").value = s.description || "";
+        log('Loaded for edit: ' + s.title);
+    }
+
+    function prevOvertimeMonth() {
+        overtimeDate = new Date(overtimeDate.getFullYear(), overtimeDate.getMonth() - 1, 1);
+        renderOvertimeCalendar();
+    }
+
+    // === OVERTIME SAVE/DELETE HANDLERS ===
+
+    function nextOvertimeMonth() {
+        overtimeDate = new Date(overtimeDate.getFullYear(), overtimeDate.getMonth() + 1, 1);
+        renderOvertimeCalendar();
+    }
+
+    function loadSchedules(callback) {
+        log('Loading schedules...');
+        fetch("/schedules")
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (data && Array.isArray(data.schedules)) {
+                    allSchedules = data.schedules;
+                    log('Schedules loaded: ' + allSchedules.length);
+                } else {
+                    allSchedules = [];
+                    log('No schedules found');
+                }
+                if (callback) callback();
+            })
+            .catch(function(err) {
+                log('Load schedules error: ' + err.message, true);
+                allSchedules = [];
+                if (callback) callback();
+            });
+    }
+
+    // === UNIFIED SAVE HANDLER ===
+    var saveEditBtn = document.getElementById("save-edit-btn");
+    if (saveEditBtn) {
+        saveEditBtn.onclick = function() {
+            var title = document.getElementById("edit-schedule-title").value.trim();
+            var date = document.getElementById("edit-schedule-date").value;
+            var startHour = document.getElementById("edit-schedule-start-hour").value;
+            var startMin = document.getElementById("edit-schedule-start-minute").value;
+            var endHour = document.getElementById("edit-schedule-end-hour").value;
+            var endMin = document.getElementById("edit-schedule-end-minute").value;
+            var hours = document.getElementById("edit-schedule-hours").value;
+            var description = document.getElementById("edit-schedule-description").value.trim();
+            if (!date) { alert("日付は必須です"); return; }
+            if (!startHour || !endHour) { alert("開始・終了時間を入力してください"); return; }
+
+            var start = startHour + ":" + startMin;
+            var end = endHour + ":" + endMin;
+
+            // Auto-calculate hours from start/end (0.25刻み)
+            hours = calcOvertimeHours(start, end);
+            document.getElementById("edit-schedule-hours").value = hours;
+            var timeVal = start + "-" + end;
+
+            var method = currentEditId ? "PUT" : "POST";
+            var url = currentEditId
+                ? "https://192.168.1.192:8765/schedules/" + currentEditId
+                : "https://192.168.1.192:8765/schedules";
+
+            fetch(url, {
+                method: method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: title || "残業", date: date, time: timeVal, description: description })
+            })
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    alert("保存しました");
+                    if (data.schedule) {
+                        if (currentEditId) {
+                            allSchedules = allSchedules.map(function(s) {
+                                return s.id === currentEditId ? data.schedule : s;
+                            });
+                        } else {
+                            allSchedules.push(data.schedule);
+                            currentEditId = data.schedule.id;
+                        }
+                    }
+                    renderOvertimeCalendar();
+                } else {
+                    alert("エラー: " + (data.error || "不明なエラー"));
+                }
+            })
+            .catch(function(err) { log('Save error: ' + err.message, true); });
+        };
+    }
+
+    var deleteEditBtn = document.getElementById("delete-edit-btn");
+    if (deleteEditBtn) {
+        deleteEditBtn.onclick = function() {
+            if (!currentEditId) { alert("削除する記録を選択してください"); return; }
+            if (confirm("削除しますか？")) {
+                deleteSchedule(currentEditId);
+            }
+        };
+    }
+
+    function deleteSchedule(id) {
+        fetch("https://192.168.1.192:8765/schedules/" + id, { method: "DELETE" })
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                log('Schedule deleted');
+                currentEditId = null;
+                allSchedules = allSchedules.filter(function(s) { return s.id !== id; });
+                renderOvertimeCalendar();
+            })
+            .catch(function(err) {
+                log('Delete error: ' + err.message, true);
+            });
+    }
+
+    // Auto-calculate hours when start/end change in edit form
+    ["edit-schedule-start", "edit-schedule-end"].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.addEventListener("change", function() {
+                var start = document.getElementById("edit-schedule-start").value;
+                var end = document.getElementById("edit-schedule-end").value;
+                if (start && end) {
+                    document.getElementById("edit-schedule-hours").value = calcOvertimeHours(start, end);
+                }
+            });
+        }
+    });
+    // === END OVERTIME CALENDAR FUNCTIONS ===
+
+    // === INIT LIFF ===
+    async function initLiff() {
+      log('initLiff: START');
+      var timeoutPromise = new Promise(function(resolve) {
+        setTimeout(function() {
+          log('initLiff: liff.init TIMEOUT after 10s', true);
+          resolve('timeout');
+        }, 10000);
+      });
+      try {
+        log('initLiff: calling liff.init...');
+        var result = await Promise.race([
+          liff.init({ liffId: '2011376207-0e7oVWOT' }),
+          timeoutPromise
+        ]);
+        if (result !== 'timeout') {
+          log('initLiff: liff.init SUCCESS');
+        }
+      } catch (err) {
+        log('initLiff: liff.init ERROR: ' + err.message, true);
+      }
+      log('initLiff: COMPLETE');
+    }
+
+    // === START ===
+    log('Starting...');
+    try {
+      initTabs();
+      log('initTabs called successfully');
+    } catch (e) {
+      log('initTabs ERROR: ' + e.message, true);
+    }
+    log('Calling initLiff...');
+    initLiff().catch(function(e) {
+      log('initLiff promise rejected: ' + e.message, true);
+    });
+    log('All initialization complete');
+
+    window.addEventListener("DOMContentLoaded", function() {
+        initTabs();
+        log("DOMContentLoaded: initTabs called");
+        loadSchedules(function() {
+            renderOvertimeCalendar();
+        });
+        loadPaidHistories();
+    });
+  </script>
+</body>
+</html>

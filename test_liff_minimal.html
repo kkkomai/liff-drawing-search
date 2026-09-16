@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LIFF Tab Test</title>
+  <script charset="utf-8" src="/sdk.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
+    .tabs { display: flex; border-bottom: 2px solid #e0e0e0; background: #fff; }
+    .tab { flex: 1; padding: 14px 8px; text-align: center; cursor: pointer; border: none; background: none; font-size: 14px; color: #666; border-bottom: 3px solid transparent; -webkit-tap-highlight-color: transparent; }
+    .tab.active { color: #00b900; border-bottom-color: #00b900; font-weight: bold; }
+    .tab-content { display: none; padding: 16px; }
+    .tab-content.active { display: block; }
+    .log-panel { position: fixed; bottom: 0; left: 0; right: 0; max-height: 40vh; background: #fffbe6; border-top: 2px solid #ffe58f; overflow-y: auto; font-family: monospace; font-size: 12px; padding: 8px; z-index: 9999; }
+    .log-entry { margin: 2px 0; border-bottom: 1px solid #f0f0f0; padding: 2px 0; }
+    .log-error { color: #e74c3c; background: #ffe6e6; }
+    .banner { position: fixed; top: 0; left: 0; right: 0; background: #e74c3c; color: #fff; text-align: center; padding: 10px; font-weight: bold; z-index: 9999; }
+  </style>
+</head>
+<body>
+  <div id="banner" class="banner" style="display:none;"></div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="overtime">残業申請</button>
+    <button class="tab" data-tab="paid">有給申請</button>
+    <button class="tab" data-tab="search">類似検索</button>
+  </div>
+
+  <div class="tab-content active" id="tab-overtime">
+    <p>残業申請フォーム</p>
+  </div>
+  <div class="tab-content" id="tab-paid">
+    <p>有給申請フォーム</p>
+  </div>
+  <div class="tab-content" id="tab-search">
+    <p>類似検索フォーム</p>
+  </div>
+
+  <div class="log-panel" id="log-panel"></div>
+
+  <script>
+    var banner = document.getElementById('banner');
+    var logPanel = document.getElementById('log-panel');
+
+    function log(msg, isError) {
+      var div = document.createElement('div');
+      div.className = 'log-entry' + (isError ? ' log-error' : '');
+      div.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+      logPanel.insertBefore(div, logPanel.firstChild);
+      console.log(msg);
+    }
+
+    function showBanner(text) {
+      banner.textContent = text;
+      banner.style.display = 'block';
+      setTimeout(function() { banner.style.display = 'none'; }, 3000);
+    }
+
+    // Catch ALL errors
+    window.onerror = function(msg, url, line) {
+      log('GLOBAL ERROR: ' + msg + ' (line ' + line + ')', true);
+      return false;
+    };
+
+    window.addEventListener('unhandledrejection', function(e) {
+      log('UNHANDLED REJECTION: ' + (e.reason ? (e.reason.message || e.reason) : 'unknown'), true);
+    });
+
+    showBanner('JS ALIVE');
+    log('JavaScript loaded');
+
+    // === TAB SWITCHING (immediate, before LIFF) ===
+    function initTabs() {
+      log('initTabs: starting');
+      var tabs = document.querySelectorAll('.tab');
+      var contents = document.querySelectorAll('.tab-content');
+      log('initTabs: found ' + tabs.length + ' tabs, ' + contents.length + ' contents');
+
+      tabs.forEach(function(tab, index) {
+        log('Adding listener to tab: ' + tab.textContent + ' (index ' + index + ')');
+        tab.addEventListener('click', function(e) {
+          e.preventDefault();
+          log('Tab clicked: ' + tab.textContent);
+          tabs.forEach(function(t) { t.classList.remove('active'); });
+          contents.forEach(function(c) { c.classList.remove('active'); });
+          tab.classList.add('active');
+          if (contents[index]) { contents[index].classList.add('active'); }
+          log('Tab switched to: ' + tab.textContent);
+        });
+        log('Listener added for: ' + tab.textContent);
+      });
+      log('initTabs: COMPLETE');
+    }
+
+    // === INIT LIFF ===
+    async function initLiff() {
+      log('initLiff: START');
+
+      var timeoutPromise = new Promise(function(resolve) {
+        setTimeout(function() {
+          log('initLiff: TIMEOUT after 10s', true);
+          resolve('timeout');
+        }, 10000);
+      });
+
+      try {
+        log('initLiff: calling liff.init...');
+        var result = await Promise.race([
+          liff.init({ liffId: '2011376207-0e7oVWOT' }),
+          timeoutPromise
+        ]);
+        if (result !== 'timeout') {
+          log('initLiff: SUCCESS');
+        }
+      } catch (err) {
+        log('initLiff: ERROR: ' + err.message, true);
+      }
+
+      log('initLiff: COMPLETE');
+    }
+
+    // === START ===
+    log('Starting...');
+
+    try {
+      initTabs();
+      log('initTabs called successfully');
+    } catch (e) {
+      log('initTabs ERROR: ' + e.message, true);
+    }
+
+    log('Calling initLiff...');
+    initLiff().catch(function(e) {
+      log('initLiff promise rejected: ' + e.message, true);
+    });
+
+    log('All initialization complete');
+  </script>
+</body>
+</html>
