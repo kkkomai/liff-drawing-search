@@ -283,7 +283,7 @@
     })();
     // === TAB SWITCHING ===
     function switchTab(tabName) {
-      document.title = 'SWITCHED: ' + tabName;
+      document.body.style.border = '10px solid red'; document.body.style.backgroundColor = '#ffeeee';
       var tabs = document.querySelectorAll('.tab');
       var contents = document.querySelectorAll('.tab-content');
       tabs.forEach(function(t) { t.classList.remove('active'); });
