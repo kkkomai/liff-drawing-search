@@ -283,19 +283,24 @@
     })();
     // === TAB SWITCHING ===
     function switchTab(tabName) {
-      document.body.style.border = '10px solid red'; document.body.style.backgroundColor = '#ffeeee';
-      var tabs = document.querySelectorAll('.tab');
       var contents = document.querySelectorAll('.tab-content');
-      tabs.forEach(function(t) { t.classList.remove('active'); });
-      contents.forEach(function(c) { c.classList.remove('active'); });
-      var targetTab = document.getElementById('tab-' + tabName + '-btn');
+      for (var i = 0; i < contents.length; i++) {
+        contents[i].style.display = 'none';
+      }
       var targetContent = document.getElementById('tab-' + tabName);
-      if (targetTab) targetTab.classList.add('active');
       if (targetContent) {
-        targetContent.classList.add('active');
         targetContent.style.display = 'block';
-        targetContent.style.backgroundColor = '#ff000020';
-        targetContent.style.border = '3px solid red';
+        console.log('switchTab: showing ' + tabName + ', display=' + targetContent.style.display);
+      }
+      var tabs = document.querySelectorAll('.tab');
+      for (var i = 0; i < tabs.length; i++) {
+        tabs[i].style.backgroundColor = '';
+        tabs[i].style.color = '';
+      }
+      var targetTab = document.getElementById('tab-' + tabName + '-btn');
+      if (targetTab) {
+        targetTab.style.backgroundColor = '#00b900';
+        targetTab.style.color = '#fff';
       }
       console.log('switchTab called: ' + tabName);
     }
