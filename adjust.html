@@ -284,13 +284,22 @@
     // === TAB SWITCHING ===
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
+      console.log('switchTab: ' + contents.length + ' contents found');
       for (var i = 0; i < contents.length; i++) {
         contents[i].style.display = 'none';
       }
       var targetContent = document.getElementById('tab-' + tabName);
+      console.log('switchTab: targetContent=' + (targetContent ? 'found' : 'NULL') + ' id=' + (targetContent ? targetContent.id : 'N/A'));
       if (targetContent) {
         targetContent.style.display = 'block';
         console.log('switchTab: showing ' + tabName + ', display=' + targetContent.style.display);
+      } else {
+        // Fallback: try querySelector
+        targetContent = document.querySelector('#tab-' + tabName);
+        console.log('switchTab: querySelector=' + (targetContent ? 'found' : 'NULL'));
+        if (targetContent) {
+          targetContent.style.display = 'block';
+        }
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
@@ -298,6 +307,7 @@
         tabs[i].style.color = '';
       }
       var targetTab = document.getElementById('tab-' + tabName + '-btn');
+      console.log('switchTab: targetTab=' + (targetTab ? 'found' : 'NULL'));
       if (targetTab) {
         targetTab.style.backgroundColor = '#00b900';
         targetTab.style.color = '#fff';
