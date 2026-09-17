@@ -283,42 +283,27 @@
     })();
     // === TAB SWITCHING ===
     function switchTab(tabName) {
-      var co = document.getElementById('tab-overtime');
-      var cp = document.getElementById('tab-paid');
-      var cs = document.getElementById('tab-search');
-      var ca = document.getElementById('tab-adjust');
-      if (co) co.style.display = 'none';
-      if (cp) cp.style.display = 'none';
-      if (cs) cs.style.display = 'none';
-      if (ca) ca.style.display = 'none';
-      
-      var target = document.getElementById('tab-' + tabName);
-      console.log('switchTab: target=' + tabName + ' -> ' + (target ? 'FOUND id=' + target.id : 'NULL'));
-      if (target) {
-        target.style.display = 'block';
-        console.log('switchTab: set ' + tabName + ' display=block');
+      var contents = document.querySelectorAll('.tab-content');
+      for (var i = 0; i < contents.length; i++) {
+        contents[i].style.display = 'none';
+      }
+      var targetContent = document.querySelector('#tab-' + tabName);
+      if (targetContent) {
+        targetContent.style.display = 'block';
+        console.log('switchTab: showing ' + tabName + ', display=' + targetContent.style.display);
       } else {
-        // Fallback: try querySelector
-        var fallback = document.querySelector('#tab-' + tabName);
-        console.log('switchTab: querySelector fallback=' + (fallback ? 'FOUND' : 'NULL'));
-        if (fallback) fallback.style.display = 'block';
+        console.log('switchTab: targetContent NULL for ' + tabName);
       }
-      
-      var to = document.getElementById('tab-overtime-btn');
-      var tp = document.getElementById('tab-paid-btn');
-      var ts = document.getElementById('tab-search-btn');
-      var ta = document.getElementById('tab-adjust-btn');
-      if (to) { to.style.backgroundColor = ''; to.style.color = ''; }
-      if (tp) { tp.style.backgroundColor = ''; tp.style.color = ''; }
-      if (ts) { ts.style.backgroundColor = ''; ts.style.color = ''; }
-      if (ta) { ta.style.backgroundColor = ''; ta.style.color = ''; }
-      
-      var tTarget = document.getElementById('tab-' + tabName + '-btn');
-      if (tTarget) {
-        tTarget.style.backgroundColor = '#00b900';
-        tTarget.style.color = '#fff';
+      var tabs = document.querySelectorAll('.tab');
+      for (var i = 0; i < tabs.length; i++) {
+        tabs[i].style.backgroundColor = '';
+        tabs[i].style.color = '';
       }
-      
+      var targetTab = document.querySelector('#tab-' + tabName + '-btn');
+      if (targetTab) {
+        targetTab.style.backgroundColor = '#00b900';
+        targetTab.style.color = '#fff';
+      }
       console.log('switchTab called: ' + tabName);
     }
 
