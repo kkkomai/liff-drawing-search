@@ -276,7 +276,7 @@ document.getElementById('search-btn').addEventListener('click', async () => {
     form.append('image', blob, 'query.jpg');
     form.append('index', 'main');
     
-    const res = await fetch('https://192.168.1.192:8765/search', { method: 'POST', body: form });
+    const res = await fetch('/search', { method: 'POST', body: form });
     const data = await res.json();
     
     log('Results: ' + (data.results?.length || 0) + ' items');
@@ -293,7 +293,7 @@ function renderResults(results) {
   if (!results.length) { el.innerHTML = '<p style="color:#666;text-align:center;">結果なし</p>'; return; }
   el.innerHTML = results.map((r, i) => 
     '<div class="search-result-item">' +
-      '<img src="https://192.168.1.192:8765' + r.image_url + '" alt="" />' +
+      '<img src="' + r.image_url + '" alt="" />' +
       '<div class="search-result-info">' +
         '<div class="search-result-name">' + r.name + '</div>' +
         '<div class="search-result-meta">類似度: ' + (r.similarity*100).toFixed(1) + '%</div>' +

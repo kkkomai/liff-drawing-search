@@ -773,8 +773,8 @@
                     row.style.cssText = 'display:flex;align-items:center;gap:8px;';
                     var img = document.createElement('img');
                     var src = '';
-                    if (r.image_url) src = 'https://192.168.1.192:8765' + r.image_url;
-                    else if (r.path) src = 'https://192.168.1.192:8765/search-images/fallback.png';
+                    if (r.image_url) src = '' + r.image_url;
+                    else if (r.path) src = '/search-images/fallback.png';
                     img.src = src;
                     img.style.cssText = 'width:120px;height:90px;object-fit:cover;border-radius:4px;background:#eee;';
                     img.alt = r.name || 'result';
