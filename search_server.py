@@ -31,20 +31,15 @@ def save_schedules(schedules):
 
 
 class Handler(SimpleHTTPRequestHandler):
-    def end_headers(self, message_body=None):
-        # Add cache-control headers to prevent LINE WebView caching
-        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate, public, max-age=0")
-        self.send_header("Pragma", "no-cache")
-        self.send_header("Expires", "0")
-        super().end_headers(message_body)
-    def do_GET(self):
-        if self.path.startswith("/uploads/"):
-            self._handle_upload()
-            return
-        if self.path == "/schedules":
-            self._handle_create_schedule()
-            return
-        self.send_json(404, {"error": "not found"})
+    """HTTP request handler with anti-cache headers for LINE WebView."""
+
+    def send_response(self, code, message=None):
+        """Override send_response to add anti-cache headers to ALL responses."""
+        SimpleHTTPRequestHandler.send_response(self, code, message)
+        # These headers are buffered and sent with end_headers()
+        SimpleHTTPRequestHandler.send_header(self, "Cache-Control", "no-cache, no-store, must-revalidate, public, max-age=0")
+        SimpleHTTPRequestHandler.send_header(self, "Pragma", "no-cache")
+        SimpleHTTPRequestHandler.send_header(self, "Expires", "0")
 
     def do_GET(self):
         if self.path.startswith("/uploads/"):
@@ -54,8 +49,8 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_response(200)
                 ext = fpath.suffix.lower()
                 ct = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}.get(ext, "image/png")
-                self.send_header("Content-Type", ct)
-                self.send_header("Content-Length", str(fpath.stat().st_size))
+                SimpleHTTPRequestHandler.send_header(self, "Content-Type", ct)
+                SimpleHTTPRequestHandler.send_header(self, "Content-Length", str(fpath.stat().st_size))
                 self.end_headers()
                 with open(fpath, "rb") as f:
                     self.wfile.write(f.read())
@@ -69,7 +64,8 @@ class Handler(SimpleHTTPRequestHandler):
             schedules = load_schedules()
             self.send_json(200, {"schedules": schedules})
             return
-        super().do_GET()
+        # For HTML/CSS/JS/SDK static files - use parent handler
+        SimpleHTTPRequestHandler.do_GET(self)
 
     def do_DELETE(self):
         if self.path.startswith("/schedules/"):
@@ -140,7 +136,8 @@ class Handler(SimpleHTTPRequestHandler):
         fpath = UPLOAD_DIR / fname
         fpath.write_bytes(image_data)
         download_url = f"/uploads/{fname}"
-        self.send_json(200, {"download_url": download_url, "message": "\u30e2\u30c3\u30d7\u30fb\u30d5\u30a1\u30a4\u30eb\u304c\u5b8c\u6210\u3067\u3057\u305f\u3002HERMES\u4fa1\u307f\u307e\u305f\u305f\u3001\u3053\u306eURL\u3092\u4ea4\u3048\u3066\u304f\u3060\u3055\u3044\u3002"})
+        self.send_json(200, {"download_url": download_url, "message": "ファイルが完了しました。"})
+
     def _handle_create_schedule(self):
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length)
@@ -163,25 +160,19 @@ class Handler(SimpleHTTPRequestHandler):
     def send_json(self, code, obj):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
+        SimpleHTTPRequestHandler.send_header(self, "Content-Type", "application/json; charset=utf-8")
+        SimpleHTTPRequestHandler.send_header(self, "Cache-Control", "no-cache, no-store, must-revalidate, public, max-age=0")
+        SimpleHTTPRequestHandler.send_header(self, "Pragma", "no-cache")
+        SimpleHTTPRequestHandler.send_header(self, "Expires", "0")
+        SimpleHTTPRequestHandler.send_header(self, "Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, fmt, *args):
-        sys.stderr.write(fmt % args + chr(10))
-
-
-def main():
-    os.chdir(BASE_DIR)
-    try:
-        with ThreadingHTTPServer(("0.0.0.0", PORT), Handler) as httpd:
-            print("Starting server...", flush=True); print(f"Server starting on port {PORT}...", flush=True)
-            httpd.serve_forever()
-    except Exception as e:
-        print(f"Server error: {e}", flush=True)
-        raise
+    def log_message(self, format, *args):
+        pass  # Suppress console logs
 
 
 if __name__ == "__main__":
-    main()
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    print(f"Server starting on port {PORT}...")
+    server.serve_forever()
