@@ -34,7 +34,7 @@ class Handler(SimpleHTTPRequestHandler):
     """HTTP request handler with anti-cache headers for LINE WebView."""
 
     def end_headers(self, message_body=None):
-                """Override end_headers to add anti-cache headers to ALL responses."""
+        """Override end_headers to add anti-cache headers to ALL responses."""
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate, public, max-age=0")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
