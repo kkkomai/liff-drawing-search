@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20260917l</title>
+  <title>申請フォーム - v20260917m</title>
   <script>window.__v="20250904c";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917l)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917m)</span></h1>
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -991,12 +991,6 @@
         var loaded = loadSearchImageToAdjust(function(dataUrl) {
           if (!dataUrl) {
             log('Failed to load search image');
-            searchBtn.dataset.searching = 'false';
-            return;
-          }
-          // Wait for image to load, then proceed
-          if (searchBtn.dataset.searching === 'true') {
-            log('Search already in progress, ignoring tap');
             return;
           }
           searchBtn.dataset.searching = 'true';
@@ -1005,49 +999,45 @@
           log('SEARCH touchstart');
           if (window.adjustedImageDataUrl) {
             log('Sending adjusted image to HERMES');
-          var formData = new FormData();
-          var blob = dataURLtoBlob(window.adjustedImageDataUrl);
-          formData.append('image', blob, 'adjusted_image.jpg');
+            var formData = new FormData();
+            var blob = dataURLtoBlob(window.adjustedImageDataUrl);
+            formData.append('image', blob, 'adjusted_image.jpg');
 
-          fetch('/search', {
-            method: 'POST',
-            body: formData
-          }).then(function(res) {
-            return res.json();
-          }).then(function(data) {
-            searchBtn.dataset.searching = 'false';
-            searchBtn.style.background = '';
-            searchBtn.textContent = '検索する';
-            log('Upload result: ' + JSON.stringify(data).substring(0, 200));
-            var resultsDiv = document.getElementById('search-results');
-            if (resultsDiv) {
-              resultsDiv.innerHTML = '';
-              resultsDiv.classList.remove('hidden');
-              var header = document.createElement('div');
-              header.style.cssText = 'font-weight:bold;margin-bottom:6px;font-size:14px;color:#00b900;';
-              header.textContent = '✅ 画像の調整が完了しました';
-              resultsDiv.appendChild(header);
-              var urlBox = document.createElement('div');
-              urlBox.style.cssText = 'background:#f0f0f0;border-radius:6px;padding:12px;margin-bottom:8px;font-family:monospace;font-size:13px;word-break:break-all;';
-              urlBox.textContent = data.download_url;
-              resultsDiv.appendChild(urlBox);
-              var msg = document.createElement('div');
-              msg.style.cssText = 'font-size:12px;color:#666;margin-top:8px;';
-              msg.textContent = 'このURLをLINEでHERMES側へ渡してください。HERMESで類似検索を行い、ヒットしたサムネイルをLINEに表示します。';
-              resultsDiv.appendChild(msg);
-            }
-          }).catch(function(err) {
-            searchBtn.dataset.searching = 'false';
-            searchBtn.style.background = '';
-            searchBtn.textContent = '検索する';
-            log('Upload error: ' + err.message, true);
-          });
-        } else {
-          alert('画像を選択してください');
-          searchBtn.dataset.searching = 'false';
-          searchBtn.style.background = '';
-          searchBtn.textContent = '検索する';
-        }
+            fetch('/search', {
+              method: 'POST',
+              body: formData
+            }).then(function(res) {
+              return res.json();
+            }).then(function(data) {
+              searchBtn.dataset.searching = 'false';
+              searchBtn.style.background = '';
+              searchBtn.textContent = '検索する';
+              log('Upload result: ' + JSON.stringify(data).substring(0, 200));
+              var resultsDiv = document.getElementById('search-results');
+              if (resultsDiv) {
+                resultsDiv.innerHTML = '';
+                resultsDiv.classList.remove('hidden');
+                var header = document.createElement('div');
+                header.style.cssText = 'font-weight:bold;margin-bottom:6px;font-size:14px;color:#00b900;';
+                header.textContent = '✅ 画像の調整が完了しました';
+                resultsDiv.appendChild(header);
+                var urlBox = document.createElement('div');
+                urlBox.style.cssText = 'background:#f0f0f0;border-radius:6px;padding:12px;margin-bottom:8px;font-family:monospace;font-size:13px;word-break:break-all;';
+                urlBox.textContent = data.download_url;
+                resultsDiv.appendChild(urlBox);
+                var msg = document.createElement('div');
+                msg.style.cssText = 'font-size:12px;color:#666;margin-top:8px;';
+                msg.textContent = 'このURLをLINEでHERMES側へ渡してください。HERMESで類似検索を行い、ヒットしたサムネイルをLINEに表示します。';
+                resultsDiv.appendChild(msg);
+              }
+            }).catch(function(err) {
+              searchBtn.dataset.searching = 'false';
+              searchBtn.style.background = '';
+              searchBtn.textContent = '検索する';
+              log('Upload error: ' + err.message, true);
+            });
+          }
+        });
       }, { passive: false });
       log('searchBtn touchstart listener attached');
     }
