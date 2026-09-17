@@ -283,6 +283,7 @@
     })();
     // === TAB SWITCHING ===
     function switchTab(tabName) {
+      document.title = 'SWITCHED: ' + tabName;
       var tabs = document.querySelectorAll('.tab');
       var contents = document.querySelectorAll('.tab-content');
       tabs.forEach(function(t) { t.classList.remove('active'); });
