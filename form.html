@@ -293,8 +293,15 @@
       if (ca) ca.style.display = 'none';
       
       var target = document.getElementById('tab-' + tabName);
+      console.log('switchTab: target=' + tabName + ' -> ' + (target ? 'FOUND id=' + target.id : 'NULL'));
       if (target) {
         target.style.display = 'block';
+        console.log('switchTab: set ' + tabName + ' display=block');
+      } else {
+        // Fallback: try querySelector
+        var fallback = document.querySelector('#tab-' + tabName);
+        console.log('switchTab: querySelector fallback=' + (fallback ? 'FOUND' : 'NULL'));
+        if (fallback) fallback.style.display = 'block';
       }
       
       var to = document.getElementById('tab-overtime-btn');
