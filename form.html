@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20260917k</title>
+  <title>申請フォーム - v20260917l</title>
   <script>window.__v="20250904c";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917k)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917l)</span></h1>
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -950,10 +950,11 @@
     }
 
     // === LOAD SEARCH IMAGE TO ADJUST TAB ===
-    function loadSearchImageToAdjust() {
+    function loadSearchImageToAdjust(callback) {
       var searchInput = document.getElementById('search-image');
       if (!searchInput || !searchInput.files || !searchInput.files[0]) {
         log('No search image selected');
+        if (callback) callback(null);
         return false;
       }
       var file = searchInput.files[0];
@@ -967,13 +968,13 @@
           var dataUrl = e.target.result;
           window.adjustedImageDataUrl = dataUrl;
           log('Loaded search image to adjust: ' + file.name + ' (' + img.width + 'x' + img.height + ')');
-          // Switch to adjust tab
           switchTab('adjust');
+          if (callback) callback(dataUrl);
         };
-        img.onerror = function() { log('Failed to load search image'); };
+        img.onerror = function() { log('Failed to load search image'); if (callback) callback(null); };
         img.src = e.target.result;
       };
-      reader.onerror = function() { log('Failed to read search image'); };
+      reader.onerror = function() { log('Failed to read search image'); if (callback) callback(null); };
       reader.readAsDataURL(file);
       return true;
     }
@@ -987,22 +988,23 @@
           return;
         }
         // Try to load search image to adjust tab first
-        var loaded = loadSearchImageToAdjust();
-        if (!loaded) {
-          log('No search image selected');
-          return;
-        }
-        // Wait for image to load, then proceed
-        if (searchBtn.dataset.searching === 'true') {
-          log('Search already in progress, ignoring tap');
-          return;
-        }
-        searchBtn.dataset.searching = 'true';
-        searchBtn.style.background = '#95a5a6';
-        searchBtn.textContent = 'HERMESへ送信中…';
-        log('SEARCH touchstart');
-        if (window.adjustedImageDataUrl) {
-          log('Sending adjusted image to HERMES');
+        var loaded = loadSearchImageToAdjust(function(dataUrl) {
+          if (!dataUrl) {
+            log('Failed to load search image');
+            searchBtn.dataset.searching = 'false';
+            return;
+          }
+          // Wait for image to load, then proceed
+          if (searchBtn.dataset.searching === 'true') {
+            log('Search already in progress, ignoring tap');
+            return;
+          }
+          searchBtn.dataset.searching = 'true';
+          searchBtn.style.background = '#95a5a6';
+          searchBtn.textContent = 'HERMESへ送信中…';
+          log('SEARCH touchstart');
+          if (window.adjustedImageDataUrl) {
+            log('Sending adjusted image to HERMES');
           var formData = new FormData();
           var blob = dataURLtoBlob(window.adjustedImageDataUrl);
           formData.append('image', blob, 'adjusted_image.jpg');
