@@ -1491,6 +1491,10 @@
     // === END DRAG & DROP + PASTE ===
 
     window.addEventListener("DOMContentLoaded", function() {
+        // Fallback: explicitly ensure active tab content is visible
+        var activeTab = document.querySelector('.tab-content.active');
+        if (activeTab) { activeTab.style.display = 'block'; }
+        
         initTabs();
         log("DOMContentLoaded: initTabs called");
         loadSchedules(function() {
