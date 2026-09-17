@@ -288,7 +288,7 @@
         contents[i].className = 'tab-content';
         contents[i].style.setProperty('display', 'none', 'important');
       }
-      console.log('getElementById test: ' + document.getElementById('tab-adjust')?.id || 'NULL');
+      console.log('getElementById test: ' + (document.getElementById('tab-adjust') ? document.getElementById('tab-adjust').id : 'NULL'));
       var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
         targetContent.className = 'tab-content active';
