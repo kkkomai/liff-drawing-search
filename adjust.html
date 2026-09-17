@@ -285,25 +285,21 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
-        contents[i].style.setProperty('display', 'none', 'important');
+        contents[i].className = contents[i].className.replace(/\s*active\s*/g, ' ').trim();
       }
       var targetContent = document.querySelector('#tab-' + tabName);
       if (targetContent) {
-        targetContent.style.setProperty('display', 'block', 'important');
-        console.log('switchTab: showing ' + tabName + ', display=' + targetContent.style.display);
-      } else {
-        console.log('switchTab: targetContent NULL for ' + tabName);
+        targetContent.className = 'tab-content active';
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
-        tabs[i].style.backgroundColor = '';
-        tabs[i].style.color = '';
+        tabs[i].className = 'tab';
       }
       var targetTab = document.querySelector('#tab-' + tabName + '-btn');
       if (targetTab) {
-        targetTab.style.backgroundColor = '#00b900';
-        targetTab.style.color = '#fff';
+        targetTab.className = 'tab active';
       }
+      console.log('switchTab: showing ' + tabName + ' via className');
       console.log('switchTab called: ' + tabName);
     }
 
