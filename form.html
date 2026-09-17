@@ -92,10 +92,10 @@
   </div>
 
   <div class="tabs" id="tabs">
-      <button class="tab active" data-tab="overtime">残業申請</button>
-      <button class="tab" data-tab="paid">有給申請</button>
-      <button class="tab" data-tab="search">類似検索</button>
-      <button class="tab" data-tab="adjust">画像調整</button>
+      <button class="tab active" data-tab="overtime" onclick="switchTab('overtime')">残業申請</button>
+      <button class="tab" data-tab="paid" onclick="switchTab('paid')">有給申請</button>
+      <button class="tab" data-tab="search" onclick="switchTab('search')">類似検索</button>
+      <button class="tab" data-tab="adjust" onclick="switchTab('adjust')">画像調整</button>
     </div>
 
   <div class="tab-content active" id="tab-overtime">
@@ -280,6 +280,19 @@
       var ac = document.querySelector('.tab-content.active');
       if (ac) ac.style.display = 'block';
     })();
+    // === TAB SWITCHING ===
+    function switchTab(tabName) {
+      var tabs = document.querySelectorAll('.tab');
+      var contents = document.querySelectorAll('.tab-content');
+      tabs.forEach(function(t) { t.classList.remove('active'); });
+      contents.forEach(function(c) { c.classList.remove('active'); });
+      var targetTab = document.querySelector('[data-tab="' + tabName + '"]');
+      var targetContent = document.getElementById('tab-' + tabName);
+      if (targetTab) targetTab.classList.add('active');
+      if (targetContent) targetContent.classList.add('active');
+      log('Switched to ' + tabName);
+    }
+
     // === LOGGING ===
     var logEl = document.getElementById('debug-log');
     function log(msg, isError) {
