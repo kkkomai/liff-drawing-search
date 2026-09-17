@@ -1,1 +1,1 @@
-requests>=2.31
+# no external dependencies needed (stdlib only)
