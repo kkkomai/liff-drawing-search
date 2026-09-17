@@ -10,7 +10,7 @@ import uuid
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
-PORT = int(os.environ.get("PORT", 10000))
+PORT = int(os.environ.get("PORT", "10000"))
 BASE_DIR = Path(__file__).parent.resolve()
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -165,9 +165,13 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
     os.chdir(BASE_DIR)
-    with ThreadingHTTPServer(("0.0.0.0", PORT), Handler) as httpd:
-        print(f"Server on http://0.0.0.0:{PORT}", flush=True)
-        httpd.serve_forever()
+    try:
+        with ThreadingHTTPServer(("0.0.0.0", PORT), Handler) as httpd:
+            print(f"Server on http://0.0.0.0:{PORT}", flush=True)
+            httpd.serve_forever()
+    except Exception as e:
+        print(f"Server error: {e}", flush=True)
+        raise
 
 
 if __name__ == "__main__":
