@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""LIFF form + schedule API + image upload server (Render-ready).
-
-Serves static files (form.html, index.html, adjust.html), provides
-/schedules CRUD API, and accepts image uploads via /search (POST).
-Uploaded images are saved under ./uploads/ and served statically.
-"""
+"""LIFF form + schedule API + image upload server (Render-ready)."""
 
 import json
 import os
@@ -111,26 +106,22 @@ class Handler(SimpleHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length)
-        # Extract boundary from content-type
-        boundary_match = re.search(r'boundary=(["']?)([^;"']+)', content_type)
-        if not boundary_match:
+        bm = content_type.find("boundary=")
+        if bm < 0:
             self.send_json(400, {"error": "no boundary"})
             return
-        boundary = boundary_match.group(2).encode()
+        boundary = content_type[bm + 9:].strip().strip(chr(34)).strip(chr(39)).encode()
         parts = raw.split(b"--" + boundary)
         image_data = None
         image_filename = None
         for part in parts:
-            if b'name="image"' in part:
-                fn_match = re.search(b'filename="([^"]+)"', part)
-                if fn_match:
-                    image_filename = fn_match.group(1).decode()
-                header_end = part.find(b"
-
-")
-                if header_end >= 0:
-                    image_data = part[header_end + 4:].rstrip(b"
-")
+            if b"name=\"image\"" in part:
+                fn_m = re.search(b"filename=\"([^\"]+)\"", part)
+                if fn_m:
+                    image_filename = fn_m.group(1).decode()
+                he = part.find(bytes([10, 10]))
+                if he >= 0:
+                    image_data = part[he + 2:].rstrip(bytes([10]))
                 break
         if not image_data or not image_filename:
             self.send_json(400, {"error": "no image provided"})
@@ -140,11 +131,7 @@ class Handler(SimpleHTTPRequestHandler):
         fpath = UPLOAD_DIR / fname
         fpath.write_bytes(image_data)
         download_url = f"/uploads/{fname}"
-        self.send_json(200, {
-            "download_url": download_url,
-            "message": "画像の調整が完了しました。HERMES側へこのURLを渡してください。"
-        })
-
+        self.send_json(200, {"download_url": download_url, "message": "\u30e2\u30c3\u30d7\u30fb\u30d5\u30a1\u30a4\u30eb\u304c\u5b8c\u6210\u3067\u3057\u305f\u3002HERMES\u4fa1\u307f\u307e\u305f\u305f\u3001\u3053\u306eURL\u3092\u4ea4\u3048\u3066\u304f\u3060\u3055\u3044\u3002"})
     def _handle_create_schedule(self):
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length)
@@ -159,13 +146,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(400, {"error": "title and date are required"})
             return
         schedules = load_schedules()
-        new = {
-            "id": str(uuid.uuid4()),
-            "title": title, "date": date,
-            "time": data.get("time", "").strip(),
-            "description": data.get("description", "").strip(),
-            "created": subprocess.check_output(["date", "+%Y-%m-%dT%H:%M:%S%z"], text=True).strip(),
-        }
+        new = {"id": str(uuid.uuid4()), "title": title, "date": date, "time": data.get("time", "").strip(), "description": data.get("description", "").strip(), "created": subprocess.check_output(["date", "+%Y-%m-%dT%H:%M:%S%z"], text=True).strip()}
         schedules.append(new)
         save_schedules(schedules)
         self.send_json(201, {"success": True, "schedule": new})
@@ -179,7 +160,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, fmt, *args):
-        sys.stderr.write(fmt % args + "\n")
+        sys.stderr.write(fmt % args + chr(10))
 
 
 def main():
