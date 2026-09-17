@@ -3,5 +3,5 @@ services:
     name: liff-drawing-search
     env: python
     plan: free
+    buildCommand: echo "rebuild at $(date)"
     startCommand: python3 search_server.py
-# Last updated: 2026年 9月 17日 木曜日 15:44:58    
