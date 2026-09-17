@@ -167,7 +167,7 @@ def main():
     os.chdir(BASE_DIR)
     try:
         with ThreadingHTTPServer(("0.0.0.0", PORT), Handler) as httpd:
-            print(f"Server on http://0.0.0.0:{PORT}", flush=True)
+            print("Starting server...", flush=True); print(f"Server on http://0.0.0.0:{PORT}", flush=True)
             httpd.serve_forever()
     except Exception as e:
         print(f"Server error: {e}", flush=True)
