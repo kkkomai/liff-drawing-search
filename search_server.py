@@ -41,6 +41,10 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(404, {"error": "not found"})
 
     def do_GET(self):
+        # Cache-control: prevent LINE WebView caching
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate, public, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         if self.path.startswith("/uploads/"):
             fname = os.path.basename(self.path)
             fpath = UPLOAD_DIR / fname
