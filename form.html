@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20260917n</title>
+  <title>申請フォーム - v20260917p</title>
   <script>window.__v="20250904c";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917n)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917p)</span></h1>
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -94,7 +94,6 @@
   <div class="tabs" id="tabs">
       <button id="tab-overtime-btn" class="tab active" data-tab="overtime" ontouchstart="switchTab('overtime')" onclick="switchTab('overtime')">残業申請</button>
       <button id="tab-paid-btn" class="tab" data-tab="paid" ontouchstart="switchTab('paid')" onclick="switchTab('paid')">有給申請</button>
-      <button id="tab-search-btn" class="tab" data-tab="search" ontouchstart="switchTab('search')" onclick="switchTab('search')">類似検索</button>
       <button id="tab-adjust-btn" class="tab" data-tab="adjust" ontouchstart="switchTab('adjust')" onclick="switchTab('adjust')">画像調整</button>
     </div>
 
@@ -196,34 +195,6 @@
     <div id="paid-histories" style="margin-top: 20px;"></div>
   </div>
 
-  <div class="tab-content" id="tab-search">
-    <div class="form-group">
-
-    <div class="file-input-wrapper">
-      <label style="display:block;font-size:14px;color:#666;">図面画像を選択</label>
-      <input type="file" id="search-image" accept="image/*">
-      <label for="search-image" class="file-label">📷 撮影・写真を選択</label>
-      <div class="file-preview" id="file-preview">未選択</div>
-    </div>
-    <div id="search-preview-container" class="hidden" style="margin-top:10px;position:relative;width:100%;max-width:400px;margin-left:auto;margin-right:auto;">
-      <img id="search-preview-image" style="width:100%;border-radius:8px;border:2px solid #00b900;display:block;" />
-      <div style="text-align:center;font-size:12px;color:#00b900;margin-top:4px;">✅ 編集済み画像</div>
-    </div>
-    <button class="btn-primary" id="search-submit" style="margin-top:16px;padding:16px;font-size:18px;-webkit-tap-highlight-color:transparent;">🔍 検索する</button>
-    <div id="search-status" class="hidden" style="margin-top:10px;padding:10px;background:#f0f0f0;border-radius:4px;"></div>
-    <div id="search-results" class="hidden" style="margin-top:14px;"></div>
-    <div id="original-preview-container" style="margin-top:12px;padding:8px;background:#f8f8f8;border-radius:6px;border:1px solid #e0e0e0;display:none;">
-      <div style="font-size:12px;color:#666;margin-bottom:4px;">元画像</div>
-      <img id="original-preview-img" style="width:100%;max-height:180px;object-fit:contain;background:#fff;border-radius:4px;border:1px solid #ccc;" />
-    </div>
-    <!-- Fullscreen image preview modal -->
-    <div id="image-preview-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.9);z-index:2000;justify-content:center;align-items:center;">
-      <img id="image-preview-modal-img" style="max-width:95vw;max-height:95vh;object-fit:contain;" />
-      <div id="image-preview-modal-title" style="position:absolute;top:10px;left:10px;color:#fff;font-size:14px;background:rgba(0,0,0,0.5);padding:6px 10px;border-radius:4px;"></div>
-    </div>
-    </div>
-  </div>
-
   <div class="tab-content" id="tab-adjust">
     <div class="form-group">
       <label>画像を選択</label>
@@ -249,7 +220,7 @@
       <button class="btn-primary" id="zoom-in" style="flex:1;padding:10px;font-size:14px;">拡大</button>
       <button class="btn-primary" id="zoom-out" style="flex:1;padding:10px;font-size:14px;">縮小</button>
     </div>
-    <button class="btn-primary" id="adjust-apply" style="margin-top:10px;padding:14px;font-size:16px;background:#00b900;">✅ 適用して類似検索へ</button>
+    <button class="btn-primary" id="adjust-search-btn" style="margin-top:10px;padding:14px;font-size:16px;background:#00b900;">🔍 検索する</button>
     <div style="margin-top:10px;font-size:12px;color:#666;text-align:center;">指でドラッグ / ピンチで拡大縮小</div>
   </div>
 
@@ -289,8 +260,7 @@
         contents[i].className = 'tab-content';
         contents[i].style.setProperty('display', 'none', 'important');
       }
-      console.log('getElementById test: ' + (document.getElementById('tab-adjust') ? document.getElementById('tab-adjust').id : 'NULL'));
-      var targetContent = document.getElementById('tab-' + tabName);
+            var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
         targetContent.className = 'tab-content active';
         targetContent.style.setProperty('display', 'block', 'important');
