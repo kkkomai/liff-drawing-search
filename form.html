@@ -285,11 +285,11 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
-        contents[i].style.display = 'none';
+        contents[i].style.setProperty('display', 'none', 'important');
       }
       var targetContent = document.querySelector('#tab-' + tabName);
       if (targetContent) {
-        targetContent.style.display = 'block';
+        targetContent.style.setProperty('display', 'block', 'important');
         console.log('switchTab: showing ' + tabName + ', display=' + targetContent.style.display);
       } else {
         console.log('switchTab: targetContent NULL for ' + tabName);
