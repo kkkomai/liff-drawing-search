@@ -971,8 +971,8 @@
                     row.style.cssText = 'display:flex;align-items:center;gap:8px;';
                     var img = document.createElement('img');
                     var src = '';
-                    if (r.image_url) src = 'https://192.168.1.192:8765' + r.image_url;
-                    else if (r.path) src = 'https://192.168.1.192:8765/search-images/fallback.png';
+                    if (r.image_url) src = '' + r.image_url;
+                    else if (r.path) src = '/search-images/fallback.png';
                     img.src = src;
                     img.style.cssText = 'width:120px;height:90px;object-fit:contain;border-radius:4px;background:#fafafa;border:1px solid #ddd;cursor:pointer;';
                     img.alt = r.name || 'result';
@@ -1366,8 +1366,8 @@
 
             var method = currentEditId ? "PUT" : "POST";
             var url = currentEditId
-                ? "https://192.168.1.192:8765/schedules/" + currentEditId
-                : "https://192.168.1.192:8765/schedules";
+                ? "/schedules/" + currentEditId
+                : "/schedules";
 
             fetch(url, {
                 method: method,
@@ -1408,7 +1408,7 @@
     }
 
     function deleteSchedule(id) {
-        fetch("https://192.168.1.192:8765/schedules/" + id, { method: "DELETE" })
+        fetch("/schedules/" + id, { method: "DELETE" })
             .then(function(resp) { return resp.json(); })
             .then(function(data) {
                 log('Schedule deleted');

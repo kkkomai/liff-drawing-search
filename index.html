@@ -1321,8 +1321,8 @@
 
             var method = currentEditId ? "PUT" : "POST";
             var url = currentEditId
-                ? "https://192.168.1.192:8765/schedules/" + currentEditId
-                : "https://192.168.1.192:8765/schedules";
+                ? "/schedules/" + currentEditId
+                : "/schedules";
 
             fetch(url, {
                 method: method,
@@ -1363,7 +1363,7 @@
     }
 
     function deleteSchedule(id) {
-        fetch("https://192.168.1.192:8765/schedules/" + id, { method: "DELETE" })
+        fetch("/schedules/" + id, { method: "DELETE" })
             .then(function(resp) { return resp.json(); })
             .then(function(data) {
                 log('Schedule deleted');
