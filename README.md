@@ -112,3 +112,4 @@ def send_liff_form(self, chat_id: str, form_type: str = "overtime"):
 - [ ] 承認ルート（1人承認 or 3者協議）
 - [ ] 保存先（既存のシステムがあるか）
 - [ ] セキュリティ要件（申請内容の暗号化など）
+# liff-drawing-search
