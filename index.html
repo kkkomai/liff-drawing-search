@@ -292,7 +292,10 @@
       if (targetContent) {
         targetContent.classList.add('active');
         targetContent.style.display = 'block';
+        targetContent.style.backgroundColor = '#ff000020';
+        targetContent.style.border = '3px solid red';
       }
+      console.log('switchTab called: ' + tabName);
     }
 
     // === LOGGING ===
