@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20260917h</title>
+  <title>申請フォーム - v20260917i</title>
   <script>window.__v="20250904c";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917h)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917i)</span></h1>
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -947,10 +947,44 @@
       }
     }
 
+    // === LOAD SEARCH IMAGE TO ADJUST TAB ===
+    function loadSearchImageToAdjust() {
+      var searchInput = document.getElementById('search-image');
+      if (!searchInput || !searchInput.files || !searchInput.files[0]) {
+        log('No search image selected');
+        return false;
+      }
+      var file = searchInput.files[0];
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var img = new Image();
+        img.onload = function() {
+          adjustImage = img;
+          adjustState = { rotation: 0, scale: 1, offsetX: 0, offsetY: 0, aspectRatio: 1.414, isFitted: false };
+          drawAdjustCanvas();
+          var dataUrl = e.target.result;
+          window.adjustedImageDataUrl = dataUrl;
+          log('Loaded search image to adjust: ' + file.name + ' (' + img.width + 'x' + img.height + ')');
+          // Switch to adjust tab
+          switchTab('adjust');
+        };
+        img.onerror = function() { log('Failed to load search image'); };
+        img.src = e.target.result;
+      };
+      reader.onerror = function() { log('Failed to read search image'); };
+      reader.readAsDataURL(file);
+      return true;
+    }
+
     // === SEARCH BUTTON ===
     if (searchBtn) {
       searchBtn.addEventListener('touchstart', function(e) {
         e.preventDefault();
+        if (searchBtn.dataset.searching === 'true') {
+          // Still try to load image even if already searching
+        }
+        // Try to load search image to adjust tab first
+        loadSearchImageToAdjust();
         if (searchBtn.dataset.searching === 'true') {
           log('Search already in progress, ignoring tap');
           return;
