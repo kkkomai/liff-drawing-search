@@ -30,6 +30,7 @@
 
     .file-input-wrapper { border: 2px dashed #ddd; border-radius: 8px; padding: 20px; text-align: center; color: #999; }
     .file-input-wrapper input[type="file"] { display: none; }
+    .file-input-wrapper.drag-over { border-color: #00b900; background: #f0fff0; }
     .file-label { display: block; padding: 12px; background: #00b900; color: #fff; border-radius: 6px; text-align: center; cursor: pointer; margin-top: 10px; -webkit-tap-highlight-color: transparent; }
     .file-preview { margin-top: 10px; font-size: 14px; color: #666; }
 
@@ -197,12 +198,7 @@
 
   <div class="tab-content" id="tab-search">
     <div class="form-group">
-      <label>インデックス</label>
-      <select id="search-index">
-        <option value="main">メイン</option>
-        <option value="photo">写真</option>
-      </select>
-    </div>
+
     <div class="file-input-wrapper">
       <label style="display:block;font-size:14px;color:#666;">図面画像を選択</label>
       <input type="file" id="search-image" accept="image/*">
@@ -929,15 +925,13 @@
         }
         searchBtn.dataset.searching = 'true';
         searchBtn.style.background = '#95a5a6';
-        searchBtn.textContent = '検索中…';
+        searchBtn.textContent = 'HERMESへ送信中…';
         log('SEARCH touchstart');
         if (window.adjustedImageDataUrl) {
-          log('Using adjusted image for search');
-          // Send the adjusted image to search API
+          log('Sending adjusted image to HERMES');
           var formData = new FormData();
           var blob = dataURLtoBlob(window.adjustedImageDataUrl);
           formData.append('image', blob, 'adjusted_image.jpg');
-          formData.append('index', document.getElementById('search-index').value);
 
           fetch('/search', {
             method: 'POST',
@@ -945,70 +939,32 @@
           }).then(function(res) {
             return res.json();
           }).then(function(data) {
-            // Reset search button
             searchBtn.dataset.searching = 'false';
             searchBtn.style.background = '';
             searchBtn.textContent = '検索する';
-            log('Search results: ' + JSON.stringify(data).substring(0, 200));
-            log('Search results: ' + JSON.stringify(data).substring(0, 200));
-            log('Search results: ' + JSON.stringify(data).substring(0, 200));
-            if (data && data.results && Array.isArray(data.results) && data.results.length) {
-              var resultsDiv = document.getElementById('search-results');
-              if (resultsDiv) {
-                // 既存結果をクリア
-                resultsDiv.innerHTML = '';
-                resultsDiv.classList.remove('hidden');
-                var header = document.createElement('div');
-                header.style.cssText = 'font-weight:bold;margin-bottom:6px;font-size:14px;';
-                header.textContent = '検索結果: ' + data.results.length + '件';
-                resultsDiv.appendChild(header);
-                for (var i = 0; i < data.results.length; i++) {
-                  (function(r) {
-                    var item = document.createElement('div');
-                    item.style.cssText = 'background:#fff;border-radius:6px;padding:8px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,0.08);overflow:hidden;';
-                    var row = document.createElement('div');
-                    row.style.cssText = 'display:flex;align-items:center;gap:8px;';
-                    var img = document.createElement('img');
-                    var src = '';
-                    if (r.image_url) src = 'https://192.168.1.192:8765' + r.image_url;
-                    else if (r.path) src = 'https://192.168.1.192:8765/search-images/fallback.png';
-                    img.src = src;
-                    img.style.cssText = 'width:120px;height:90px;object-fit:contain;border-radius:4px;background:#fafafa;border:1px solid #ddd;cursor:pointer;';
-                    img.alt = r.name || 'result';
-                    img.onclick = function(e) {
-                        e.stopPropagation();
-                        showImagePreview(src, r.name || 'result');
-                    };
-                    var info = document.createElement('div');
-                    info.style.cssText = 'flex:1;min-width:0;';
-                    var nameEl = document.createElement('div');
-                    nameEl.style.cssText = 'font-weight:bold;font-size:13px;color:#2a2a2a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-                    nameEl.textContent = r.name || 'result';
-                    var simEl = document.createElement('div');
-                    simEl.style.cssText = 'font-size:11px;color:#888;';
-                    simEl.textContent = '類似度: ' + (r.similarity != null && r.similarity !== undefined ? r.similarity.toFixed(4) : 'N/A');
-                    info.appendChild(nameEl);
-                    info.appendChild(simEl);
-                    row.appendChild(img);
-                    row.appendChild(info);
-                    item.appendChild(row);
-                    resultsDiv.appendChild(item);
-                  })(data.results[i]);
-                }
-                log('Search results rendered: ' + data.results.length + ' items');
-              }
-            } else {
-              var fallbackDiv = document.getElementById('search-results');
-              if (fallbackDiv) {
-                fallbackDiv.innerHTML = '検索結果がありませんでした。';
-                fallbackDiv.classList.remove('hidden');
-              }
+            log('Upload result: ' + JSON.stringify(data).substring(0, 200));
+            var resultsDiv = document.getElementById('search-results');
+            if (resultsDiv) {
+              resultsDiv.innerHTML = '';
+              resultsDiv.classList.remove('hidden');
+              var header = document.createElement('div');
+              header.style.cssText = 'font-weight:bold;margin-bottom:6px;font-size:14px;color:#00b900;';
+              header.textContent = '✅ 画像の調整が完了しました';
+              resultsDiv.appendChild(header);
+              var urlBox = document.createElement('div');
+              urlBox.style.cssText = 'background:#f0f0f0;border-radius:6px;padding:12px;margin-bottom:8px;font-family:monospace;font-size:13px;word-break:break-all;';
+              urlBox.textContent = data.download_url;
+              resultsDiv.appendChild(urlBox);
+              var msg = document.createElement('div');
+              msg.style.cssText = 'font-size:12px;color:#666;margin-top:8px;';
+              msg.textContent = 'このURLをLINEでHERMES側へ渡してください。HERMESで類似検索を行い、ヒットしたサムネイルをLINEに表示します。';
+              resultsDiv.appendChild(msg);
             }
           }).catch(function(err) {
             searchBtn.dataset.searching = 'false';
             searchBtn.style.background = '';
             searchBtn.textContent = '検索する';
-            log('Search error: ' + err.message, true);
+            log('Upload error: ' + err.message, true);
           });
         } else {
           alert('画像を選択してください');
@@ -1472,6 +1428,67 @@
       log('initLiff promise rejected: ' + e.message, true);
     });
     log('All initialization complete');
+
+    // === DRAG & DROP + PASTE SUPPORT ===
+    function handleDroppedOrPastedFile(file, targetInputId) {
+      if (!file) return;
+      if (!file.type || !file.type.startsWith('image/')) {
+        log('Not an image file: ' + file.type, true);
+        return;
+      }
+      var targetInput = document.getElementById(targetInputId);
+      if (targetInput) {
+        try {
+          var dt = new DataTransfer();
+          dt.items.add(file);
+          targetInput.files = dt.files;
+          targetInput.dispatchEvent(new Event('change'));
+        } catch(err) { /* fallback */ }
+      }
+      log('File set via drag/drop/paste: ' + file.name + ' → ' + targetInputId);
+    }
+
+    function setupDragDrop(wrapperSelector, fileInputId) {
+      var wrapper = document.querySelector(wrapperSelector);
+      if (!wrapper) return;
+
+      wrapper.addEventListener('dragenter', function(e) {
+        e.preventDefault(); e.stopPropagation(); wrapper.classList.add('drag-over');
+      });
+      wrapper.addEventListener('dragover', function(e) {
+        e.preventDefault(); e.stopPropagation(); wrapper.classList.add('drag-over');
+      });
+      wrapper.addEventListener('dragleave', function(e) {
+        e.preventDefault(); wrapper.classList.remove('drag-over');
+      });
+      wrapper.addEventListener('drop', function(e) {
+        e.preventDefault(); e.stopPropagation(); wrapper.classList.remove('drag-over');
+        var files = e.dataTransfer.files;
+        if (files.length > 0) {
+          handleDroppedOrPastedFile(files[0], fileInputId);
+        }
+      });
+    }
+
+    setupDragDrop('.file-input-wrapper:nth-of-type(1)', 'search-image');
+    setupDragDrop('.file-input-wrapper:nth-of-type(2)', 'adjust-image');
+
+    document.addEventListener('paste', function(e) {
+      var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      if (!items) return;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.startsWith('image/')) {
+          var file = items[i].getAsFile();
+          if (file) {
+            handleDroppedOrPastedFile(file, 'search-image');
+            e.preventDefault(); break;
+          }
+        }
+      }
+    });
+
+    log('Drag & Drop + Paste handlers installed');
+    // === END DRAG & DROP + PASTE ===
 
     window.addEventListener("DOMContentLoaded", function() {
         initTabs();

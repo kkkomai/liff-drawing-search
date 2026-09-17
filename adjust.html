@@ -30,6 +30,7 @@
 
     .file-input-wrapper { border: 2px dashed #ddd; border-radius: 8px; padding: 20px; text-align: center; color: #999; }
     .file-input-wrapper input[type="file"] { display: none; }
+    .file-input-wrapper.drag-over { border-color: #00b900; background: #f0fff0; }
     .file-label { display: block; padding: 12px; background: #00b900; color: #fff; border-radius: 6px; text-align: center; cursor: pointer; margin-top: 10px; -webkit-tap-highlight-color: transparent; }
     .file-preview { margin-top: 10px; font-size: 14px; color: #666; }
 
@@ -1472,6 +1473,67 @@
       log('initLiff promise rejected: ' + e.message, true);
     });
     log('All initialization complete');
+
+    // === DRAG & DROP + PASTE SUPPORT ===
+    function handleDroppedOrPastedFile(file, targetInputId) {
+      if (!file) return;
+      if (!file.type || !file.type.startsWith('image/')) {
+        log('Not an image file: ' + file.type, true);
+        return;
+      }
+      var targetInput = document.getElementById(targetInputId);
+      if (targetInput) {
+        try {
+          var dt = new DataTransfer();
+          dt.items.add(file);
+          targetInput.files = dt.files;
+          targetInput.dispatchEvent(new Event('change'));
+        } catch(err) { /* fallback */ }
+      }
+      log('File set via drag/drop/paste: ' + file.name + ' → ' + targetInputId);
+    }
+
+    function setupDragDrop(wrapperSelector, fileInputId) {
+      var wrapper = document.querySelector(wrapperSelector);
+      if (!wrapper) return;
+
+      wrapper.addEventListener('dragenter', function(e) {
+        e.preventDefault(); e.stopPropagation(); wrapper.classList.add('drag-over');
+      });
+      wrapper.addEventListener('dragover', function(e) {
+        e.preventDefault(); e.stopPropagation(); wrapper.classList.add('drag-over');
+      });
+      wrapper.addEventListener('dragleave', function(e) {
+        e.preventDefault(); wrapper.classList.remove('drag-over');
+      });
+      wrapper.addEventListener('drop', function(e) {
+        e.preventDefault(); e.stopPropagation(); wrapper.classList.remove('drag-over');
+        var files = e.dataTransfer.files;
+        if (files.length > 0) {
+          handleDroppedOrPastedFile(files[0], fileInputId);
+        }
+      });
+    }
+
+    setupDragDrop('.file-input-wrapper:nth-of-type(1)', 'search-image');
+    setupDragDrop('.file-input-wrapper:nth-of-type(2)', 'adjust-image');
+
+    document.addEventListener('paste', function(e) {
+      var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      if (!items) return;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.startsWith('image/')) {
+          var file = items[i].getAsFile();
+          if (file) {
+            handleDroppedOrPastedFile(file, 'search-image');
+            e.preventDefault(); break;
+          }
+        }
+      }
+    });
+
+    log('Drag & Drop + Paste handlers installed');
+    // === END DRAG & DROP + PASTE ===
 
     window.addEventListener("DOMContentLoaded", function() {
         initTabs();
