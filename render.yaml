@@ -4,5 +4,5 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python search_server.py
+    startCommand: python3 search_server.py
     staticPublishPath: .
