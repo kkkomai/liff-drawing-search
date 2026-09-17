@@ -285,13 +285,13 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
-        contents[i].style.cssText = '';
+        contents[i].className = 'tab-content';
         contents[i].style.display = 'none';
       }
       var targetContent = document.querySelector('#tab-' + tabName);
       if (targetContent) {
-        targetContent.style.cssText = '';
-        targetContent.style.setProperty('display', 'block', 'important');
+        targetContent.className = 'tab-content active';
+        targetContent.style.display = 'block';
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
@@ -301,7 +301,7 @@
       if (targetTab) {
         targetTab.className = 'tab active';
       }
-      console.log('switchTab: showing ' + tabName + ' via cssText');
+      console.log('switchTab: showing ' + tabName);
       console.log('switchTab called: ' + tabName);
     }
 
