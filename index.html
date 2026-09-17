@@ -285,12 +285,11 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
-        contents[i].style.display = '';
-        contents[i].className = contents[i].className.replace(/\s*active\s*/g, ' ').trim();
+        contents[i].style.removeProperty('display');
       }
       var targetContent = document.querySelector('#tab-' + tabName);
       if (targetContent) {
-        targetContent.className = 'tab-content active';
+        targetContent.style.setProperty('display', 'block', 'important');
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
@@ -299,9 +298,10 @@
       }
       var targetTab = document.querySelector('#tab-' + tabName + '-btn');
       if (targetTab) {
-        targetTab.className = 'tab active';
+        targetTab.style.backgroundColor = '#00b900';
+        targetTab.style.color = '#fff';
       }
-      console.log('switchTab: showing ' + tabName + ' via className');
+      console.log('switchTab: showing ' + tabName + ' via setProperty');
       console.log('switchTab called: ' + tabName);
     }
 
