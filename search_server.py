@@ -31,8 +31,14 @@ def save_schedules(schedules):
 
 
 class Handler(SimpleHTTPRequestHandler):
-    def do_POST(self):
-        if self.path == "/search":
+    def send_response(self, code, message=None):
+        # Add cache-control headers to prevent LINE WebView caching
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate, public, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().send_response(code, message)
+    def do_GET(self):
+        if self.path.startswith("/uploads/"):
             self._handle_upload()
             return
         if self.path == "/schedules":
@@ -41,10 +47,6 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(404, {"error": "not found"})
 
     def do_GET(self):
-        # Cache-control: prevent LINE WebView caching
-        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate, public, max-age=0")
-        self.send_header("Pragma", "no-cache")
-        self.send_header("Expires", "0")
         if self.path.startswith("/uploads/"):
             fname = os.path.basename(self.path)
             fpath = UPLOAD_DIR / fname
