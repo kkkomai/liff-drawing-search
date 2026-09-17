@@ -31,12 +31,12 @@ def save_schedules(schedules):
 
 
 class Handler(SimpleHTTPRequestHandler):
-    def send_response(self, code, message=None):
+    def end_headers(self, message_body=None):
         # Add cache-control headers to prevent LINE WebView caching
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate, public, max-age=0")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
-        super().send_response(code, message)
+        super().end_headers(message_body)
     def do_GET(self):
         if self.path.startswith("/uploads/"):
             self._handle_upload()
