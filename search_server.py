@@ -56,6 +56,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             self.send_json(404, {"error": "image not found"})
             return
+        if self.path == "/health":
+            self.send_json(200, {"status": "ok", "port": PORT})
+            return
         if self.path == "/schedules":
             schedules = load_schedules()
             self.send_json(200, {"schedules": schedules})
@@ -167,7 +170,7 @@ def main():
     os.chdir(BASE_DIR)
     try:
         with ThreadingHTTPServer(("0.0.0.0", PORT), Handler) as httpd:
-            print("Starting server...", flush=True); print(f"Server on http://0.0.0.0:{PORT}", flush=True)
+            print("Starting server...", flush=True); print(f"Server starting on port {PORT}...", flush=True)
             httpd.serve_forever()
     except Exception as e:
         print(f"Server error: {e}", flush=True)
