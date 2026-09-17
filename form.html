@@ -1519,8 +1519,7 @@
         var activeTab = document.querySelector('.tab-content.active');
         if (activeTab) { activeTab.style.display = 'block'; }
         
-        // initTabs() removed - using onclick handlers instead
-        log("DOMContentLoaded: initTabs removed");
+        log("DOMContentLoaded: using switchTab");
         loadSchedules(function() {
             renderOvertimeCalendar();
         });
