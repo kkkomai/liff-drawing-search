@@ -285,6 +285,7 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
+        contents[i].style.display = '';
         contents[i].className = contents[i].className.replace(/\s*active\s*/g, ' ').trim();
       }
       var targetContent = document.querySelector('#tab-' + tabName);
@@ -293,7 +294,8 @@
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
-        tabs[i].className = 'tab';
+        tabs[i].style.backgroundColor = '';
+        tabs[i].style.color = '';
       }
       var targetTab = document.querySelector('#tab-' + tabName + '-btn');
       if (targetTab) {
