@@ -280,6 +280,11 @@
   </div>
 
   <script>
+    // === IMMEDIATE TAB VISIBILITY FALLBACK ===
+    (function() {
+      var ac = document.querySelector('.tab-content.active');
+      if (ac) ac.style.display = 'block';
+    })();
     // === LOGGING ===
     var logEl = document.getElementById('debug-log');
     function log(msg, isError) {
