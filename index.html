@@ -1513,8 +1513,8 @@
         var activeTab = document.querySelector('.tab-content.active');
         if (activeTab) { activeTab.style.display = 'block'; }
         
-        initTabs();
-        log("DOMContentLoaded: initTabs called");
+        // initTabs() removed - using onclick handlers instead
+        log("DOMContentLoaded: initTabs removed");
         loadSchedules(function() {
             renderOvertimeCalendar();
         });
