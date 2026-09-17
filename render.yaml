@@ -4,4 +4,4 @@ services:
     env: python
     plan: free
     buildCommand: python3 -c "print('Building at $(date)')" && touch /tmp/build-trigger
-    startCommand: python3 search_server.py
+    startCommand: python3 search_server.py --v 20260917b
