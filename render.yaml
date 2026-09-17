@@ -2,6 +2,7 @@ services:
   - type: web
     name: liff-drawing-search
     env: python
+    pythonVersion: "3.14"
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python search_server.py
