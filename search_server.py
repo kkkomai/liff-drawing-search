@@ -33,13 +33,12 @@ def save_schedules(schedules):
 class Handler(SimpleHTTPRequestHandler):
     """HTTP request handler with anti-cache headers for LINE WebView."""
 
-    def send_response(self, code, message=None):
-        """Override send_response to add anti-cache headers to ALL responses."""
-        SimpleHTTPRequestHandler.send_response(self, code, message)
-        # These headers are buffered and sent with end_headers()
-        SimpleHTTPRequestHandler.send_header(self, "Cache-Control", "no-cache, no-store, must-revalidate, public, max-age=0")
-        SimpleHTTPRequestHandler.send_header(self, "Pragma", "no-cache")
-        SimpleHTTPRequestHandler.send_header(self, "Expires", "0")
+    def end_headers(self, message_body=None):
+        """Override end_headers to add anti-cache headers to ALL responses."""
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate, public, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        SimpleHTTPRequestHandler.end_headers(self, message_body)
 
     def do_GET(self):
         if self.path.startswith("/uploads/"):
