@@ -1441,12 +1441,6 @@
 
     // === START ===
     log('Starting...');
-    try {
-      initTabs();
-      log('initTabs called successfully');
-    } catch (e) {
-      log('initTabs ERROR: ' + e.message, true);
-    }
     log('Calling initLiff...');
     initLiff().catch(function(e) {
       log('initLiff promise rejected: ' + e.message, true);
