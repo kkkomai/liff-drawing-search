@@ -282,19 +282,15 @@
     })();
     // === TAB SWITCHING ===
     function switchTab(tabName) {
-      var tabs = document.getElementsByClassName('tab');
-      var contents = document.getElementsByClassName('tab-content');
-      for (var i = 0; i < tabs.length; i++) {
-        tabs[i].className = tabs[i].className.replace(/ active/g, '');
-      }
-      for (var i = 0; i < contents.length; i++) {
-        contents[i].className = contents[i].className.replace(/ active/g, '');
-      }
+      var tabs = document.querySelectorAll('.tab');
+      var contents = document.querySelectorAll('.tab-content');
+      tabs.forEach(function(t) { t.classList.remove('active'); });
+      contents.forEach(function(c) { c.classList.remove('active'); });
       var targetTab = document.getElementById('tab-' + tabName + '-btn');
       var targetContent = document.getElementById('tab-' + tabName);
-      if (targetTab) targetTab.className += ' active';
+      if (targetTab) targetTab.classList.add('active');
       if (targetContent) {
-        targetContent.className += ' active';
+        targetContent.classList.add('active');
         targetContent.style.display = 'block';
       }
     }
