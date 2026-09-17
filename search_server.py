@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# VERSION: v20260917
 """LIFF form + schedule API + image upload server (Render-ready)."""
 
 import json
