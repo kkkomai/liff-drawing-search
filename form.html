@@ -433,31 +433,6 @@
     log('editorOverlay: ' + !!editorOverlay);
 
     // === TAB SWITCHING ===
-    function initTabs() {
-          var tabs = document.querySelectorAll('.tab');
-          var contents = document.querySelectorAll('.tab-content');
-          log('initTabs: found ' + tabs.length + ' tabs, ' + contents.length + ' contents');
-
-          tabs.forEach(function(tab, index) {
-            function handleTabSwitch(e) {
-              if (e) { e.preventDefault(); }
-              log('Tab touched/clicked: ' + tab.textContent + ' (index ' + index + ')');
-              tabs.forEach(function(t) { t.classList.remove('active'); });
-              contents.forEach(function(c) { c.classList.remove('active'); });
-              tab.classList.add('active');
-              if (contents[index]) { contents[index].classList.add('active'); }
-              log('Tab switched to index ' + index);
-              if (tab.getAttribute('data-tab') === 'overtime') {
-                renderOvertimeCalendar();
-              }
-            }
-            tab.addEventListener('touchstart', handleTabSwitch);
-            tab.addEventListener('click', handleTabSwitch);
-            log('Tab listener added: ' + tab.textContent);
-          });
-          log('initTabs: COMPLETE');
-        }
-
     // === EDITOR STATE ===
     var editorState = { rotation: 0, scale: 1, offsetX: 0, offsetY: 0, image: null, aspectRatio: 4/3, trimMode: false };
 
