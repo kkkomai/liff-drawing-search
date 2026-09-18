@@ -183,6 +183,36 @@ class Handler(SimpleHTTPRequestHandler):
         save_schedules(schedules)
         self.send_json(201, {"success": True, "schedule": new})
 
+    def do_POST(self):
+        if self.path == "/search":
+            content_length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(content_length)
+            content_type = self.headers.get("Content-Type", "")
+            boundary = None
+            if "boundary=" in content_type:
+                boundary = content_type.split("boundary=")[-1].encode()
+            image_data = None
+            if boundary:
+                parts = raw.split(bytes([45, 45]) + boundary)
+                for part in parts:
+                    if b"filename=" in part:
+                        hdr_end = part.find(bytes([13, 10, 13, 10]))
+                        if hdr_end != -1:
+                            image_data = part[hdr_end + 4:]
+                            while image_data[-2:] == bytes([13, 10]):
+                                image_data = image_data[:-2]
+                        break
+            if image_data:
+                fname = "adjusted_" + str(int(time.time())) + ".jpg"
+                fpath = UPLOAD_DIR / fname
+                with open(fpath, "wb") as f:
+                    f.write(image_data)
+                self.send_json(200, {"download_url": "/uploads/" + fname})
+                return
+            self.send_json(400, {"error": "No image data"})
+            return
+        self.send_json(404, {"error": "not found"})
+
     def send_json(self, code, obj):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
