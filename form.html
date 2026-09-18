@@ -808,6 +808,7 @@
           if (adjustPreview) adjustPreview.textContent = this.files[0].name;
           var reader = new FileReader();
           reader.onload = function(e) {
+            window.adjustedImageDataUrl = e.target.result;
             var img = new Image();
             img.onload = function() {
               adjustImage = img;
