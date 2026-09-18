@@ -6,9 +6,10 @@ services:
     buildCommand: python3 -c "
 with open('form.html', 'r') as f:
     c = f.read()
-c = c.replace('v20260917x', 'v20260917z')
+import re
+c = re.sub(r'v20260917[a-z]', 'v20260917z', c)
 with open('form.html', 'w') as f:
     f.write(c)
-print('Updated form.html version')
+print('Updated form.html to v20260917z')
 " && python3 search_server.py
     startCommand: python3 search_server.py
