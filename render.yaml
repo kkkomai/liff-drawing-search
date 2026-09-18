@@ -3,14 +3,18 @@ services:
     name: liff-drawing-search
     env: python
     plan: free
-    # Trigger rebuild
-    buildCommand: python3 -c "
+        buildCommand: python3 -c "
 with open('form.html', 'r') as f:
     c = f.read()
 import re
 c = re.sub(r'v20260917[a-z]+', 'v20260917z', c)
 with open('form.html', 'w') as f:
     f.write(c)
-print('Updated form.html to v20260917z')
+with open('search_server.py', 'r') as f:
+    c2 = f.read()
+c2 = re.sub(r'v20260917[a-z]+', 'v20260917z', c2)
+with open('search_server.py', 'w') as f:
+    f.write(c2)
+print('Updated all files to v20260917z')
 " && python3 search_server.py
     startCommand: python3 search_server.py
