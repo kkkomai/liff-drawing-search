@@ -238,7 +238,7 @@ class Handler(SimpleHTTPRequestHandler):
             if "boundary=" in content_type:
                 boundary = content_type.split("boundary=")[-1].encode()
             image_data = None
-            line_user_id = ""
+            line_user_id = "@115raswp"
             if boundary:
                 parts = raw.split(bytes([45, 45]) + boundary)
                 for part in parts:
