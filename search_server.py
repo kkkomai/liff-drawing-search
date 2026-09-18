@@ -250,8 +250,7 @@ class Handler(SimpleHTTPRequestHandler):
                                 image_data = image_data[:-2]
                         break
                     if b"lineUserId=" in part:
-                        lm = __import__('re').search(b"lineUserId=([^&
-]+)", part)
+                        lm = __import__("re").search(b"lineUserId=([^&]+)", self.path)
                         if lm:
                             line_user_id = lm.group(1).decode()
             if image_data:
