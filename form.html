@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20260917n</title>
+  <title>申請フォーム - v20260917x</title>
   <script>window.__v="20250904c";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917n)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917x)</span></h1>
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -257,24 +257,27 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
-        contents[i].className = 'tab-content';
-        contents[i].style.setProperty('display', 'none', 'important');
+        contents[i].style.display = 'none';
+        contents[i].style.removeProperty('display');
       }
       var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
-        targetContent.className = 'tab-content active';
-        targetContent.style.setProperty('display', 'block', 'important');
+        targetContent.style.display = 'block';
+        targetContent.style.removeProperty('display');
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
-        tabs[i].className = 'tab';
+        tabs[i].style.borderBottomColor = '';
+        tabs[i].style.color = '';
+        tabs[i].style.fontWeight = '';
       }
       var targetTab = document.getElementById('tab-' + tabName + '-btn');
       if (targetTab) {
-        targetTab.className = 'tab active';
+        targetTab.style.borderBottomColor = '#00b900';
+        targetTab.style.color = '#00b900';
+        targetTab.style.fontWeight = 'bold';
       }
       console.log('switchTab: showing ' + tabName);
-      console.log('switchTab called: ' + tabName);
     }
 
     // === LOGGING ===
@@ -303,24 +306,27 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
-        contents[i].className = 'tab-content';
-        contents[i].style.setProperty('display', 'none', 'important');
+        contents[i].style.display = 'none';
+        contents[i].style.removeProperty('display');
       }
       var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
-        targetContent.className = 'tab-content active';
-        targetContent.style.setProperty('display', 'block', 'important');
+        targetContent.style.display = 'block';
+        targetContent.style.removeProperty('display');
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
-        tabs[i].className = 'tab';
+        tabs[i].style.borderBottomColor = '';
+        tabs[i].style.color = '';
+        tabs[i].style.fontWeight = '';
       }
       var targetTab = document.getElementById('tab-' + tabName + '-btn');
       if (targetTab) {
-        targetTab.className = 'tab active';
+        targetTab.style.borderBottomColor = '#00b900';
+        targetTab.style.color = '#00b900';
+        targetTab.style.fontWeight = 'bold';
       }
       console.log('switchTab: showing ' + tabName);
-      console.log('switchTab called: ' + tabName);
     }
 
     // === LOGGING ===
@@ -349,24 +355,27 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
-        contents[i].className = 'tab-content';
-        contents[i].style.setProperty('display', 'none', 'important');
+        contents[i].style.display = 'none';
+        contents[i].style.removeProperty('display');
       }
       var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
-        targetContent.className = 'tab-content active';
-        targetContent.style.setProperty('display', 'block', 'important');
+        targetContent.style.display = 'block';
+        targetContent.style.removeProperty('display');
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
-        tabs[i].className = 'tab';
+        tabs[i].style.borderBottomColor = '';
+        tabs[i].style.color = '';
+        tabs[i].style.fontWeight = '';
       }
       var targetTab = document.getElementById('tab-' + tabName + '-btn');
       if (targetTab) {
-        targetTab.className = 'tab active';
+        targetTab.style.borderBottomColor = '#00b900';
+        targetTab.style.color = '#00b900';
+        targetTab.style.fontWeight = 'bold';
       }
       console.log('switchTab: showing ' + tabName);
-      console.log('switchTab called: ' + tabName);
     }
 
     // === LOGGING ===
@@ -395,24 +404,27 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
-        contents[i].className = 'tab-content';
-        contents[i].style.setProperty('display', 'none', 'important');
+        contents[i].style.display = 'none';
+        contents[i].style.removeProperty('display');
       }
       var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
-        targetContent.className = 'tab-content active';
-        targetContent.style.setProperty('display', 'block', 'important');
+        targetContent.style.display = 'block';
+        targetContent.style.removeProperty('display');
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
-        tabs[i].className = 'tab';
+        tabs[i].style.borderBottomColor = '';
+        tabs[i].style.color = '';
+        tabs[i].style.fontWeight = '';
       }
       var targetTab = document.getElementById('tab-' + tabName + '-btn');
       if (targetTab) {
-        targetTab.className = 'tab active';
+        targetTab.style.borderBottomColor = '#00b900';
+        targetTab.style.color = '#00b900';
+        targetTab.style.fontWeight = 'bold';
       }
       console.log('switchTab: showing ' + tabName);
-      console.log('switchTab called: ' + tabName);
     }
 
     // === LOGGING ===
