@@ -6,7 +6,7 @@ services:
     buildCommand: python3 -c "
 with open('form.html', 'r') as f:
     c = f.read()
-c = c.replace('v20260917n', 'v20260917x')
+c = c.replace('v20260917x', 'v20260917z')
 with open('form.html', 'w') as f:
     f.write(c)
 print('Updated form.html version')
