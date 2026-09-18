@@ -3,11 +3,5 @@ services:
     name: liff-drawing-search
     env: python
     plan: free
-    buildCommand: python3 -c "
-import os, datetime
-now = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-with open('.render-build-time', 'w') as f:
-    f.write(now)
-print('BUILD:', now)
-"
+    buildCommand: echo "rebuild" && python3 -c "import datetime; open('.rb','w').write(datetime.datetime.now().strftime('%Y%m%d%H%M%S'))"
     startCommand: python3 search_server.py
