@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20260917z</title>
+  <title>申請フォーム - v20260917aa</title>
   <script>window.__v="20250904c";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917z)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917aa)</span></h1>
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -257,13 +257,11 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
-        contents[i].style.display = 'none';
-        contents[i].style.removeProperty('display');
+        contents[i].style.cssText = 'display: none !important;';
       }
       var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
-        targetContent.style.display = 'block';
-        targetContent.style.removeProperty('display');
+        targetContent.style.cssText = 'display: block !important;';
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
@@ -306,13 +304,11 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
-        contents[i].style.display = 'none';
-        contents[i].style.removeProperty('display');
+        contents[i].style.cssText = 'display: none !important;';
       }
       var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
-        targetContent.style.display = 'block';
-        targetContent.style.removeProperty('display');
+        targetContent.style.cssText = 'display: block !important;';
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
@@ -355,13 +351,11 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
-        contents[i].style.display = 'none';
-        contents[i].style.removeProperty('display');
+        contents[i].style.cssText = 'display: none !important;';
       }
       var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
-        targetContent.style.display = 'block';
-        targetContent.style.removeProperty('display');
+        targetContent.style.cssText = 'display: block !important;';
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
@@ -404,13 +398,11 @@
     function switchTab(tabName) {
       var contents = document.querySelectorAll('.tab-content');
       for (var i = 0; i < contents.length; i++) {
-        contents[i].style.display = 'none';
-        contents[i].style.removeProperty('display');
+        contents[i].style.cssText = 'display: none !important;';
       }
       var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
-        targetContent.style.display = 'block';
-        targetContent.style.removeProperty('display');
+        targetContent.style.cssText = 'display: block !important;';
       }
       var tabs = document.querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i++) {
