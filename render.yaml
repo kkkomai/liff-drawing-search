@@ -3,6 +3,7 @@ services:
     name: liff-drawing-search
     env: python
     plan: free
+    # Trigger rebuild
     buildCommand: python3 -c "
 with open('form.html', 'r') as f:
     c = f.read()
