@@ -260,7 +260,6 @@
         contents[i].className = 'tab-content';
         contents[i].style.setProperty('display', 'none', 'important');
       }
-      console.log('getElementById test: ' + (document.getElementById('tab-adjust') ? document.getElementById('tab-adjust').id : 'NULL'));
       var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
         targetContent.className = 'tab-content active';
@@ -307,55 +306,6 @@
         contents[i].className = 'tab-content';
         contents[i].style.setProperty('display', 'none', 'important');
       }
-      console.log('getElementById test: ' + (document.getElementById('tab-adjust') ? document.getElementById('tab-adjust').id : 'NULL'));
-      var targetContent = document.getElementById('tab-' + tabName);
-      if (targetContent) {
-        targetContent.className = 'tab-content active';
-        targetContent.style.setProperty('display', 'block', 'important');
-      }
-      var tabs = document.querySelectorAll('.tab');
-      for (var i = 0; i < tabs.length; i++) {
-        tabs[i].className = 'tab';
-      }
-      var targetTab = document.getElementById('tab-' + tabName + '-btn');
-      if (targetTab) {
-        targetTab.className = 'tab active';
-      }
-      console.log('switchTab: showing ' + tabName);
-      console.log('switchTab called: ' + tabName);
-    }
-
-    // === LOGGING ===
-    var logEl = document.getElementById('debug-log');
-    function log(msg, isError) {
-      console.log(msg);
-      if (logEl) {
-        logEl.textContent = msg + '\n' + logEl.textContent;
-      }
-    }
-    log('=== JS LOADED ===');
-
-    // === ELEMENTS ===
-    var editorOverlay = document.getElementById('editor-overlay');
-    var editorCanvas = document.getElementById('editor-canvas');
-    var editorContainer = document.getElementById('editor-container');
-
-    log('editorOverlay: ' + !!editorOverlay);
-
-    // === TAB SWITCHING ===
-    // === IMMEDIATE TAB VISIBILITY FALLBACK ===
-    (function() {
-      var ac = document.querySelector('.tab-content.active');
-      if (ac) ac.style.display = 'block';
-    })();
-    // === TAB SWITCHING ===
-    function switchTab(tabName) {
-      var contents = document.querySelectorAll('.tab-content');
-      for (var i = 0; i < contents.length; i++) {
-        contents[i].className = 'tab-content';
-        contents[i].style.setProperty('display', 'none', 'important');
-      }
-      console.log('getElementById test: ' + (document.getElementById('tab-adjust') ? document.getElementById('tab-adjust').id : 'NULL'));
       var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
         targetContent.className = 'tab-content active';
@@ -402,7 +352,52 @@
         contents[i].className = 'tab-content';
         contents[i].style.setProperty('display', 'none', 'important');
       }
-      console.log('getElementById test: ' + (document.getElementById('tab-adjust') ? document.getElementById('tab-adjust').id : 'NULL'));
+      var targetContent = document.getElementById('tab-' + tabName);
+      if (targetContent) {
+        targetContent.className = 'tab-content active';
+        targetContent.style.setProperty('display', 'block', 'important');
+      }
+      var tabs = document.querySelectorAll('.tab');
+      for (var i = 0; i < tabs.length; i++) {
+        tabs[i].className = 'tab';
+      }
+      var targetTab = document.getElementById('tab-' + tabName + '-btn');
+      if (targetTab) {
+        targetTab.className = 'tab active';
+      }
+      console.log('switchTab: showing ' + tabName);
+      console.log('switchTab called: ' + tabName);
+    }
+
+    // === LOGGING ===
+    var logEl = document.getElementById('debug-log');
+    function log(msg, isError) {
+      console.log(msg);
+      if (logEl) {
+        logEl.textContent = msg + '\n' + logEl.textContent;
+      }
+    }
+    log('=== JS LOADED ===');
+
+    // === ELEMENTS ===
+    var editorOverlay = document.getElementById('editor-overlay');
+    var editorCanvas = document.getElementById('editor-canvas');
+    var editorContainer = document.getElementById('editor-container');
+
+    log('editorOverlay: ' + !!editorOverlay);
+
+    // === IMMEDIATE TAB VISIBILITY FALLBACK ===
+    (function() {
+      var ac = document.querySelector('.tab-content.active');
+      if (ac) ac.style.display = 'block';
+    })();
+    // === TAB SWITCHING ===
+    function switchTab(tabName) {
+      var contents = document.querySelectorAll('.tab-content');
+      for (var i = 0; i < contents.length; i++) {
+        contents[i].className = 'tab-content';
+        contents[i].style.setProperty('display', 'none', 'important');
+      }
       var targetContent = document.getElementById('tab-' + tabName);
       if (targetContent) {
         targetContent.className = 'tab-content active';
