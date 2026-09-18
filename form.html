@@ -1424,6 +1424,7 @@
         ]);
         if (result !== 'timeout') {
           log('initLiff: liff.init SUCCESS');
+      liff.getProfile().then(function(profile) { window.lineUserId = profile.userId; });
         }
       } catch (err) {
         log('initLiff: liff.init ERROR: ' + err.message, true);

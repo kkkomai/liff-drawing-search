@@ -32,6 +32,29 @@ def save_schedules(schedules):
         json.dump(schedules, f, ensure_ascii=False, indent=2)
 
 
+def sendImageToLine(user_id, image_url, access_token):
+    """Send image to LINE user using LINE Messaging API."""
+    import urllib.request
+    url = 'https://api.line.me/v2/bot/message/push'
+    payload = json.dumps({
+        'to': user_id,
+        'messages': [{
+            'type': 'image',
+            'originalContentUrl': image_url,
+            'previewImageUrl': image_url
+        }]
+    }).encode('utf-8')
+    req = urllib.request.Request(url, data=payload, headers={
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        return {'error': str(e)}
+
+
 def findSimilarImages(imageDataUrl, searchQuery='', imageCount=3, userId='', scheduleName=''):
     """Call HERMES API to find similar images."""
     import urllib.request
@@ -89,6 +112,7 @@ class Handler(SimpleHTTPRequestHandler):
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
             image_data_url = params.get('image', [''])[0]
+            line_user_id = params.get('lineUserId', [''])[0]
             if not image_data_url:
                 self.send_json(400, {"error": "no image data"})
                 return
@@ -102,9 +126,15 @@ class Handler(SimpleHTTPRequestHandler):
                 image_bytes = base64.b64decode(base64_data)
                 with open(fpath, "wb") as f:
                     f.write(image_bytes)
+            image_url = f"https://liff-drawing-search.onrender.com/uploads/{fname}"
+            # Send to LINE
+            line_access_token = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN', '')
+            line_result = {}
+            if line_user_id and line_access_token:
+                line_result = sendImageToLine(line_user_id, image_url, line_access_token)
             # Call HERMES for similar search
             search_result = findSimilarImages(image_data_url)
-            self.send_json(200, {"download_url": "/uploads/" + fname, "search_results": search_result})
+            self.send_json(200, {"download_url": "/uploads/" + fname, "search_results": search_result, "line_result": line_result})
             return
         # For HTML/CSS/JS/SDK static files - use parent handler
         SimpleHTTPRequestHandler.do_GET(self)
@@ -208,6 +238,7 @@ class Handler(SimpleHTTPRequestHandler):
             if "boundary=" in content_type:
                 boundary = content_type.split("boundary=")[-1].encode()
             image_data = None
+            line_user_id = ""
             if boundary:
                 parts = raw.split(bytes([45, 45]) + boundary)
                 for part in parts:
@@ -218,12 +249,27 @@ class Handler(SimpleHTTPRequestHandler):
                             while image_data[-2:] == bytes([13, 10]):
                                 image_data = image_data[:-2]
                         break
+                    if b"lineUserId=" in part:
+                        lm = __import__('re').search(b"lineUserId=([^&
+]+)", part)
+                        if lm:
+                            line_user_id = lm.group(1).decode()
             if image_data:
                 fname = "adjusted_" + str(int(time.time())) + ".jpg"
                 fpath = UPLOAD_DIR / fname
                 with open(fpath, "wb") as f:
                     f.write(image_data)
-                self.send_json(200, {"download_url": "/uploads/" + fname})
+                image_url = f"https://liff-drawing-search.onrender.com/uploads/{fname}"
+                # Send to LINE
+                line_access_token = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN', '')
+                line_result = {}
+                if line_user_id and line_access_token:
+                    line_result = sendImageToLine(line_user_id, image_url, line_access_token)
+                # Call HERMES for similar search
+                import base64 as _b64
+                image_base64 = "data:image/jpeg;base64," + _b64.b64encode(image_data).decode()
+                search_result = findSimilarImages(image_base64)
+                self.send_json(200, {"download_url": "/uploads/" + fname, "search_results": search_result, "line_result": line_result})
                 return
             self.send_json(400, {"error": "No image data"})
             return
