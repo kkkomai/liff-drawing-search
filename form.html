@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20260917x</title>
+  <title>申請フォーム - v20260917z</title>
   <script>window.__v="20250904c";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917x)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917z)</span></h1>
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -983,32 +983,6 @@
             var img = document.getElementById("image-preview-modal-img");
             if (img) img.src = "";
         };
-    }
-
-    // === FILE INPUT ===
-    if (fileInput) {
-      fileInput.addEventListener('change', function() {
-        log('fileInput change: ' + (this.files[0] ? this.files[0].name : 'null'));
-        if (this.files[0]) {
-          if (filePreview) filePreview.textContent = this.files[0].name;
-          // Switch to adjust tab and load image there
-          adjustFileInput.files = this.files;
-          adjustFileInput.dispatchEvent(new Event('change'));
-          // Switch tab to adjust
-          var tabs = document.querySelectorAll('.tab');
-          var contents = document.querySelectorAll('.tab-content');
-          tabs.forEach(function(t) { t.classList.remove('active'); });
-          contents.forEach(function(c) { c.classList.remove('active'); });
-          var adjustTab = document.querySelector('[data-tab="adjust"]');
-          var adjustContent = document.getElementById('tab-adjust');
-          if (adjustTab) adjustTab.classList.add('active');
-          if (adjustContent) adjustContent.classList.add('active');
-          log('Switched to adjust tab');
-        }
-      });
-      log('fileInput listener attached');
-    } else {
-      log('fileInput NOT FOUND', true);
     }
 
     // === PAID LEAVE HISTORY ===
