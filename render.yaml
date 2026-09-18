@@ -7,5 +7,7 @@ services:
     envVars:
     - key: HERMES_API_URL
       value: https://hermes.example.com/api/search
+    - key: LINE_CHANNEL_ACCESS_TOKEN
+      value: [REDACTED]
     buildCommand: python3 -c "import re; [open(f,'w').write(re.sub(r'v20260917[a-z]+','v20260917z',open(f).read())) for f in ['form.html','search_server.py']]; print('OK')"
     startCommand: python3 search_server.py
