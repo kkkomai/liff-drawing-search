@@ -1,0 +1,4 @@
+render.yaml text eol=lf
+*.py text eol=lf
+*.html text eol=lf
+*.yaml text eol=lf
