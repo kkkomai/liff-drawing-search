@@ -979,7 +979,6 @@
         ]);
         if (result !== 'timeout') {
           log('initLiff: liff.init SUCCESS');
-      liff.getProfile().then(function(profile) { window.lineUserId = profile.userId; });
         }
       } catch (err) {
         log('initLiff: liff.init ERROR: ' + err.message, true);
@@ -1036,8 +1035,6 @@
       });
     }
 
-    setupDragDrop('.file-input-wrapper:nth-of-type(1)', 'adjust-image');
-    setupDragDrop('.file-input-wrapper:nth-of-type(2)', 'adjust-image');
 
     document.addEventListener('paste', function(e) {
       var items = (e.clipboardData || e.originalEvent.clipboardData).items;
@@ -1046,7 +1043,6 @@
         if (items[i].type && items[i].type.startsWith('image/')) {
           var file = items[i].getAsFile();
           if (file) {
-            handleDroppedOrPastedFile(file, 'adjust-image');
             e.preventDefault(); break;
           }
         }
