@@ -4,7 +4,7 @@
 """LIFF form + schedule API + image upload server (Render-ready)."""
 
 import json
-import os
+import os, time, time
 import re
 import subprocess
 import sys
@@ -157,6 +157,42 @@ class Handler(SimpleHTTPRequestHandler):
         schedules.append(new)
         save_schedules(schedules)
         self.send_json(201, {"success": True, "schedule": new})
+
+    def do_POST(self):
+        if self.path == "/search":
+            content_length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(content_length)
+            content_type = self.headers.get("Content-Type", "")
+            boundary = None
+            if "boundary=" in content_type:
+                boundary = content_type.split("boundary=")[-1].encode()
+            
+            # Try to extract image from multipart form data
+            image_data = None
+            if boundary:
+                parts = raw.split(b"--" + boundary)
+                for part in parts:
+                    if b"filename=" in part:
+                        header_end = part.find(b"
+
+")
+                        if header_end != -1:
+                            image_data = part[header_end + 4:].rstrip(b"
+")
+                        break
+            
+            if image_data:
+                fname = "adjusted_" + str(int(time.time())) + ".jpg"
+                fpath = UPLOAD_DIR / fname
+                with open(fpath, "wb") as f:
+                    f.write(image_data)
+                self.send_json(200, {"download_url": "/uploads/" + fname})
+                return
+            
+            self.send_json(400, {"error": "No image data"})
+            return
+        
+        self.send_json(404, {"error": "not found"})
 
     def send_json(self, code, obj):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
