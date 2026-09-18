@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # BUILD: 2026-09-17T16:00:00
-# VERSION: v20260917y
+# VERSION: v20260917ab
 """LIFF form + schedule API + image upload server (Render-ready)."""
 
 import json
@@ -173,11 +173,14 @@ class Handler(SimpleHTTPRequestHandler):
                 parts = raw.split(b"--" + boundary)
                 for part in parts:
                     if b"filename=" in part:
-                        header_end = part.find(b"
-
+                        header_end = part.find(b"
+
+
+
 ")
                         if header_end != -1:
-                            image_data = part[header_end + 4:].rstrip(b"
+                            image_data = part[header_end + 4:].rstrip(b"
+
 ")
                         break
             
