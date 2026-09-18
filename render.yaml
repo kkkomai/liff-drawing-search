@@ -3,18 +3,5 @@ services:
     name: liff-drawing-search
     env: python
     plan: free
-        buildCommand: python3 -c "
-with open('form.html', 'r') as f:
-    c = f.read()
-import re
-c = re.sub(r'v20260917[a-z]+', 'v20260917z', c)
-with open('form.html', 'w') as f:
-    f.write(c)
-with open('search_server.py', 'r') as f:
-    c2 = f.read()
-c2 = re.sub(r'v20260917[a-z]+', 'v20260917z', c2)
-with open('search_server.py', 'w') as f:
-    f.write(c2)
-print('Updated all files to v20260917z')
-" && python3 search_server.py
+    buildCommand: python3 -c "import re; [open(f,'w').write(re.sub(r'v20260917[a-z]+','v20260917z',open(f).read())) for f in ['form.html','search_server.py']]; print('OK')"
     startCommand: python3 search_server.py
