@@ -32,6 +32,25 @@ def save_schedules(schedules):
         json.dump(schedules, f, ensure_ascii=False, indent=2)
 
 
+def findSimilarImages(imageDataUrl, searchQuery='', imageCount=3, userId='', scheduleName=''):
+    """Call HERMES API to find similar images."""
+    import urllib.request
+    hermes_url = os.environ.get('HERMES_API_URL', 'https://hermes.example.com/api/search')
+    payload = json.dumps({
+        'image': imageDataUrl,
+        'query': searchQuery,
+        'imageCount': imageCount,
+        'userId': userId,
+        'scheduleName': scheduleName
+    }).encode('utf-8')
+    req = urllib.request.Request(hermes_url, data=payload, headers={'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        return {'error': str(e)}
+
+
 class Handler(SimpleHTTPRequestHandler):
     """HTTP request handler with anti-cache headers for LINE WebView."""
 
@@ -66,30 +85,27 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(200, {"schedules": schedules})
             return
         if self.path.startswith("/search"):
-            # Parse image data URL from query parameters
             from urllib.parse import urlparse, parse_qs
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
             image_data_url = params.get('image', [''])[0]
-            print(f"DEBUG /search: path={self.path[:100]}... image_len={len(image_data_url)}")
             if not image_data_url:
-                print("DEBUG /search: no image_data_url")
                 self.send_json(400, {"error": "no image data"})
                 return
-            if image_data_url:
-                # Save the image to uploads directory
-                import time as _time
-                fname = "adjusted_" + str(int(_time.time())) + ".jpg"
-                fpath = UPLOAD_DIR / fname
-                # Extract base64 data from data URL
-                if ',' in image_data_url:
-                    base64_data = image_data_url.split(',')[1]
-                    import base64
-                    image_bytes = base64.b64decode(base64_data)
-                    with open(fpath, "wb") as f:
-                        f.write(image_bytes)
-                self.send_json(200, {"download_url": "/uploads/" + fname})
-                return
+            # Save the image
+            import time as _time
+            fname = "adjusted_" + str(int(_time.time())) + ".jpg"
+            fpath = UPLOAD_DIR / fname
+            if ',' in image_data_url:
+                base64_data = image_data_url.split(',')[1]
+                import base64
+                image_bytes = base64.b64decode(base64_data)
+                with open(fpath, "wb") as f:
+                    f.write(image_bytes)
+            # Call HERMES for similar search
+            search_result = findSimilarImages(image_data_url)
+            self.send_json(200, {"download_url": "/uploads/" + fname, "search_results": search_result})
+            return
         # For HTML/CSS/JS/SDK static files - use parent handler
         SimpleHTTPRequestHandler.do_GET(self)
 
