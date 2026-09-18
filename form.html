@@ -301,29 +301,6 @@
       if (ac) ac.style.display = 'block';
     })();
     // === TAB SWITCHING ===
-    function switchTab(tabName) {
-      var contents = document.querySelectorAll('.tab-content');
-      for (var i = 0; i < contents.length; i++) {
-        contents[i].style.cssText = 'display: none !important;';
-      }
-      var targetContent = document.getElementById('tab-' + tabName);
-      if (targetContent) {
-        targetContent.style.cssText = 'display: block !important;';
-      }
-      var tabs = document.querySelectorAll('.tab');
-      for (var i = 0; i < tabs.length; i++) {
-        tabs[i].style.borderBottomColor = '';
-        tabs[i].style.color = '';
-        tabs[i].style.fontWeight = '';
-      }
-      var targetTab = document.getElementById('tab-' + tabName + '-btn');
-      if (targetTab) {
-        targetTab.style.borderBottomColor = '#00b900';
-        targetTab.style.color = '#00b900';
-        targetTab.style.fontWeight = 'bold';
-      }
-      console.log('switchTab: showing ' + tabName);
-    }
 
     // === LOGGING ===
     var logEl = document.getElementById('debug-log');
@@ -348,29 +325,6 @@
       if (ac) ac.style.display = 'block';
     })();
     // === TAB SWITCHING ===
-    function switchTab(tabName) {
-      var contents = document.querySelectorAll('.tab-content');
-      for (var i = 0; i < contents.length; i++) {
-        contents[i].style.cssText = 'display: none !important;';
-      }
-      var targetContent = document.getElementById('tab-' + tabName);
-      if (targetContent) {
-        targetContent.style.cssText = 'display: block !important;';
-      }
-      var tabs = document.querySelectorAll('.tab');
-      for (var i = 0; i < tabs.length; i++) {
-        tabs[i].style.borderBottomColor = '';
-        tabs[i].style.color = '';
-        tabs[i].style.fontWeight = '';
-      }
-      var targetTab = document.getElementById('tab-' + tabName + '-btn');
-      if (targetTab) {
-        targetTab.style.borderBottomColor = '#00b900';
-        targetTab.style.color = '#00b900';
-        targetTab.style.fontWeight = 'bold';
-      }
-      console.log('switchTab: showing ' + tabName);
-    }
 
     // === LOGGING ===
     var logEl = document.getElementById('debug-log');
@@ -395,29 +349,6 @@
       if (ac) ac.style.display = 'block';
     })();
     // === TAB SWITCHING ===
-    function switchTab(tabName) {
-      var contents = document.querySelectorAll('.tab-content');
-      for (var i = 0; i < contents.length; i++) {
-        contents[i].style.cssText = 'display: none !important;';
-      }
-      var targetContent = document.getElementById('tab-' + tabName);
-      if (targetContent) {
-        targetContent.style.cssText = 'display: block !important;';
-      }
-      var tabs = document.querySelectorAll('.tab');
-      for (var i = 0; i < tabs.length; i++) {
-        tabs[i].style.borderBottomColor = '';
-        tabs[i].style.color = '';
-        tabs[i].style.fontWeight = '';
-      }
-      var targetTab = document.getElementById('tab-' + tabName + '-btn');
-      if (targetTab) {
-        targetTab.style.borderBottomColor = '#00b900';
-        targetTab.style.color = '#00b900';
-        targetTab.style.fontWeight = 'bold';
-      }
-      console.log('switchTab: showing ' + tabName);
-    }
 
     // === LOGGING ===
     var logEl = document.getElementById('debug-log');
