@@ -94,7 +94,7 @@
   <div class="tabs" id="tabs">
       <button id="tab-overtime-btn" class="tab active" data-tab="overtime" ontouchstart="switchTab('overtime')" onclick="switchTab('overtime')">残業申請</button>
       <button id="tab-paid-btn" class="tab" data-tab="paid" ontouchstart="switchTab('paid')" onclick="switchTab('paid')">有給申請</button>
-      <button id="tab-adjust-btn" class="tab" data-tab="adjust" ontouchstart="switchTab('adjust')" onclick="switchTab('adjust')">画像調整</button>
+
     </div>
 
   <div class="tab-content active" id="tab-overtime">
@@ -195,34 +195,7 @@
     <div id="paid-histories" style="margin-top: 20px;"></div>
   </div>
 
-  <div class="tab-content" id="tab-adjust">
-    <div class="form-group">
-      <label>画像を選択</label>
-      <input type="file" id="adjust-image" accept="image/*">
-      <label for="adjust-image" class="file-label">📷 撮影・写真を選択</label>
-      <div class="file-preview" id="adjust-preview">未選択</div>
-    </div>
-    <div class="form-group">
-      <label>アスペクト比</label>
-      <select id="adjust-aspect">
-        <option value="1.414">A4 (1:√2, 縦)</option>
-        <option value="0.707">A4 (1:√2, 横)</option>
-      </select>
-    </div>
-    <div id="adjust-canvas-container" style="position:relative;width:100%;height:300px;background:#111;border-radius:8px;overflow:hidden;touch-action:none;">
-      <canvas id="adjust-canvas" style="width:100%;height:100%;display:block;"></canvas>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-      <button class="btn-primary" id="rotate-left" style="flex:1;padding:10px;font-size:14px;">↺ -90°</button>
-      <button class="btn-primary" id="rotate-right" style="flex:1;padding:10px;font-size:14px;">↻ +90°</button>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
-      <button class="btn-primary" id="zoom-in" style="flex:1;padding:10px;font-size:14px;">拡大</button>
-      <button class="btn-primary" id="zoom-out" style="flex:1;padding:10px;font-size:14px;">縮小</button>
-    </div>
-    <button class="btn-primary" id="adjust-search-btn" style="margin-top:10px;padding:14px;font-size:16px;background:#00b900;">🔍 検索する</button>
-    <div style="margin-top:10px;font-size:12px;color:#666;text-align:center;">指でドラッグ / ピンチで拡大縮小</div>
-  </div>
+  
 
   <div class="editor-overlay" id="editor-overlay" style="display:none !important;">
     <div class="editor-header">
@@ -762,58 +735,7 @@
       log('adjustFileInput listener attached');
     }
     // === ADJUST SEARCH BUTTON ===
-    var adjustSearchBtn = document.getElementById('adjust-search-btn');
-    if (adjustSearchBtn) {
-      adjustSearchBtn.addEventListener('touchstart', function(e) {
-        e.preventDefault();
-        if (adjustSearchBtn.dataset.searching === 'true') {
-          log('Search already in progress, ignoring tap');
-          return;
-        }
-        if (!window.adjustedImageDataUrl) {
-          log('No adjusted image - please select and adjust image first');
-          alert('画像を選択して調整してから検索してください');
-          return;
-        }
-        adjustSearchBtn.dataset.searching = 'true';
-        adjustSearchBtn.style.background = '#95a5a6';
-        adjustSearchBtn.textContent = 'HERMESへ送信中…';
-        log('SEARCH touchstart');
-        var imageUrl = encodeURIComponent(adjustCanvas.toDataURL('image/jpeg', 0.9));
-        log('Sending adjusted image to HERMES');
-        fetch('/search?image=' + imageUrl).then(function(res) {
-          return res.json();
-        }).then(function(data) {
-          adjustSearchBtn.dataset.searching = 'false';
-          adjustSearchBtn.style.background = '';
-          adjustSearchBtn.textContent = '🔍 検索する';
-          log('Upload result: ' + JSON.stringify(data).substring(0, 200));
-          var resultsDiv = document.getElementById('search-results');
-          if (resultsDiv) {
-            resultsDiv.innerHTML = '';
-            resultsDiv.classList.remove('hidden');
-            var header = document.createElement('div');
-            header.style.cssText = 'font-weight:bold;margin-bottom:6px;font-size:14px;color:#00b900;';
-            header.textContent = '✅ 画像の調整が完了しました';
-            resultsDiv.appendChild(header);
-            var urlBox = document.createElement('div');
-            urlBox.style.cssText = 'background:#f0f0f0;border-radius:6px;padding:12px;margin-bottom:8px;font-family:monospace;font-size:13px;word-break:break-all;';
-            urlBox.textContent = data.download_url;
-            resultsDiv.appendChild(urlBox);
-            var msg = document.createElement('div');
-            msg.style.cssText = 'font-size:12px;color:#666;margin-top:8px;';
-            msg.textContent = 'このURLをLINEでHERMES側へ渡してください。HERMESで類似検索を行い、ヒットしたサムネイルをLINEに表示します。';
-            resultsDiv.appendChild(msg);
-          }
-        }).catch(function(err) {
-          adjustSearchBtn.dataset.searching = 'false';
-          adjustSearchBtn.style.background = '';
-          adjustSearchBtn.textContent = '🔍 検索する';
-          log('Upload error: ' + err);
-        });
-      });
-      log('adjustSearchBtn touchstart listener attached');
-    }
+    
 
 
     document.getElementById('rotate-left').addEventListener('click', function() {
