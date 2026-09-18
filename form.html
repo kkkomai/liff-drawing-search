@@ -289,15 +289,58 @@
     log('=== JS LOADED ===');
 
     // === ELEMENTS ===
-    var fileInput = document.getElementById('search-image');
-    var filePreview = document.getElementById('file-preview');
-        var searchStatus = document.getElementById('search-status');
     var editorOverlay = document.getElementById('editor-overlay');
     var editorCanvas = document.getElementById('editor-canvas');
     var editorContainer = document.getElementById('editor-container');
 
-    log('fileInput: ' + !!fileInput);
-        log('editorOverlay: ' + !!editorOverlay);
+    log('editorOverlay: ' + !!editorOverlay);
+
+    // === IMMEDIATE TAB VISIBILITY FALLBACK ===
+    (function() {
+      var ac = document.querySelector('.tab-content.active');
+      if (ac) ac.style.display = 'block';
+    })();
+    // === TAB SWITCHING ===
+    function switchTab(tabName) {
+      var contents = document.querySelectorAll('.tab-content');
+      for (var i = 0; i < contents.length; i++) {
+        contents[i].className = 'tab-content';
+        contents[i].style.setProperty('display', 'none', 'important');
+      }
+      console.log('getElementById test: ' + (document.getElementById('tab-adjust') ? document.getElementById('tab-adjust').id : 'NULL'));
+      var targetContent = document.getElementById('tab-' + tabName);
+      if (targetContent) {
+        targetContent.className = 'tab-content active';
+        targetContent.style.setProperty('display', 'block', 'important');
+      }
+      var tabs = document.querySelectorAll('.tab');
+      for (var i = 0; i < tabs.length; i++) {
+        tabs[i].className = 'tab';
+      }
+      var targetTab = document.getElementById('tab-' + tabName + '-btn');
+      if (targetTab) {
+        targetTab.className = 'tab active';
+      }
+      console.log('switchTab: showing ' + tabName);
+      console.log('switchTab called: ' + tabName);
+    }
+
+    // === LOGGING ===
+    var logEl = document.getElementById('debug-log');
+    function log(msg, isError) {
+      console.log(msg);
+      if (logEl) {
+        logEl.textContent = msg + '\n' + logEl.textContent;
+      }
+    }
+    log('=== JS LOADED ===');
+
+    // === ELEMENTS ===
+    var editorOverlay = document.getElementById('editor-overlay');
+    var editorCanvas = document.getElementById('editor-canvas');
+    var editorContainer = document.getElementById('editor-container');
+
+    log('editorOverlay: ' + !!editorOverlay);
 
     // === TAB SWITCHING ===
     function initTabs() {
@@ -1466,7 +1509,7 @@
       });
     }
 
-    setupDragDrop('.file-input-wrapper:nth-of-type(1)', 'search-image');
+    setupDragDrop('.file-input-wrapper:nth-of-type(1)', 'adjust-image');
     setupDragDrop('.file-input-wrapper:nth-of-type(2)', 'adjust-image');
 
     document.addEventListener('paste', function(e) {
@@ -1476,7 +1519,7 @@
         if (items[i].type && items[i].type.startsWith('image/')) {
           var file = items[i].getAsFile();
           if (file) {
-            handleDroppedOrPastedFile(file, 'search-image');
+            handleDroppedOrPastedFile(file, 'adjust-image');
             e.preventDefault(); break;
           }
         }
