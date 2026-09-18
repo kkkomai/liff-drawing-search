@@ -35,7 +35,7 @@ def save_schedules(schedules):
 def findSimilarImages(imageDataUrl, searchQuery='', imageCount=3, userId='', scheduleName=''):
     """Call HERMES API to find similar images."""
     import urllib.request
-    hermes_url = os.environ.get('HERMES_API_URL', 'https://hermes.example.com/api/search')
+    hermes_url = 'https://hermes.example.com/api/search'
     payload = json.dumps({
         'image': imageDataUrl,
         'query': searchQuery,
