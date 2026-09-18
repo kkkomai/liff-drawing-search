@@ -132,9 +132,8 @@ class Handler(SimpleHTTPRequestHandler):
             line_result = {}
             if line_user_id and line_access_token:
                 line_result = sendImageToLine(line_user_id, image_url, line_access_token)
-            # Call HERMES for similar search
-            search_result = findSimilarImages(image_data_url)
-            self.send_json(200, {"download_url": "/uploads/" + fname, "search_results": search_result, "line_result": line_result})
+            # Image sent to LINE (HERMES) for similar search
+            self.send_json(200, {"download_url": "/uploads/" + fname, "search_results": {}, "line_result": line_result})
             return
         # For HTML/CSS/JS/SDK static files - use parent handler
         SimpleHTTPRequestHandler.do_GET(self)
@@ -264,11 +263,8 @@ class Handler(SimpleHTTPRequestHandler):
                 line_result = {}
                 if line_user_id and line_access_token:
                     line_result = sendImageToLine(line_user_id, image_url, line_access_token)
-                # Call HERMES for similar search
-                import base64 as _b64
-                image_base64 = "data:image/jpeg;base64," + _b64.b64encode(image_data).decode()
-                search_result = findSimilarImages(image_base64)
-                self.send_json(200, {"download_url": "/uploads/" + fname, "search_results": search_result, "line_result": line_result})
+                # Image sent to LINE (HERMES) for similar search
+                self.send_json(200, {"download_url": "/uploads/" + fname, "search_results": {}, "line_result": line_result})
                 return
             self.send_json(400, {"error": "No image data"})
             return
