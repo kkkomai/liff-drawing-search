@@ -3,5 +3,12 @@ services:
     name: liff-drawing-search
     env: python
     plan: free
-    buildCommand: echo "rebuild" && python3 -c "import datetime; open('.rb','w').write(datetime.datetime.now().strftime('%Y%m%d%H%M%S'))"
+    buildCommand: python3 -c "
+with open('form.html', 'r') as f:
+    c = f.read()
+c = c.replace('v20260917n', 'v20260917x')
+with open('form.html', 'w') as f:
+    f.write(c)
+print('Updated form.html version')
+" && python3 search_server.py
     startCommand: python3 search_server.py
