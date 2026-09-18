@@ -65,6 +65,26 @@ class Handler(SimpleHTTPRequestHandler):
             schedules = load_schedules()
             self.send_json(200, {"schedules": schedules})
             return
+        if self.path.startswith("/search"):
+            # Parse image data URL from query parameters
+            from urllib.parse import urlparse, parse_qs
+            parsed = urlparse(self.path)
+            params = parse_qs(parsed.query)
+            image_data_url = params.get('image', [''])[0]
+            if image_data_url:
+                # Save the image to uploads directory
+                import time as _time
+                fname = "adjusted_" + str(int(_time.time())) + ".jpg"
+                fpath = UPLOAD_DIR / fname
+                # Extract base64 data from data URL
+                if ',' in image_data_url:
+                    base64_data = image_data_url.split(',')[1]
+                    import base64
+                    image_bytes = base64.b64decode(base64_data)
+                    with open(fpath, "wb") as f:
+                        f.write(image_bytes)
+                self.send_json(200, {"download_url": "/uploads/" + fname})
+                return
         # For HTML/CSS/JS/SDK static files - use parent handler
         SimpleHTTPRequestHandler.do_GET(self)
 
