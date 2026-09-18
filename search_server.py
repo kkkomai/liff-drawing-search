@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # BUILD: 2026-09-17T16:00:00
-# VERSION: v20260917ab
+# VERSION: v20260917ad
 """LIFF form + schedule API + image upload server (Render-ready)."""
 
 import json
@@ -71,6 +71,11 @@ class Handler(SimpleHTTPRequestHandler):
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
             image_data_url = params.get('image', [''])[0]
+            print(f"DEBUG /search: path={self.path[:100]}... image_len={len(image_data_url)}")
+            if not image_data_url:
+                print("DEBUG /search: no image_data_url")
+                self.send_json(400, {"error": "no image data"})
+                return
             if image_data_url:
                 # Save the image to uploads directory
                 import time as _time
