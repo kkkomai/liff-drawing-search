@@ -3,6 +3,7 @@
 
 import json
 import os, subprocess, uuid
+from datetime import datetime, timezone, timedelta
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
@@ -97,7 +98,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json(400, {"error": "title and date are required"})
                 return
             schedules = load_schedules()
-            new = {"id": str(uuid.uuid4()), "title": title, "date": date, "time": data.get("time", "").strip(), "description": data.get("description", "").strip(), "created": subprocess.check_output(["date", "+%Y-%m-%dT%H:%M:%S%z"], text=True).strip()}
+            new = {"id": str(uuid.uuid4()), "title": title, "date": date, "time": data.get("time", "").strip(), "description": data.get("description", "").strip(), "created": datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%dT%H:%M:%S+0900")}
             schedules.append(new)
             save_schedules(schedules)
             self.send_json(201, {"success": True, "schedule": new})
