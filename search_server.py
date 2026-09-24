@@ -90,8 +90,9 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 raw = self.rfile.read(length)
+                text = raw.decode("utf-8", errors="replace")
                 try:
-                    data = json.loads(raw.decode("utf-8"))
+                    data = json.loads(text)
                 except json.JSONDecodeError:
                     self.send_json(400, {"error": "invalid JSON"})
                     return
