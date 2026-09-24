@@ -2,11 +2,13 @@
 """LIFF schedule API server (Render-ready)."""
 
 import json
+import logging
 import os, subprocess, uuid
 from datetime import datetime, timezone, timedelta
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
 PORT = int(os.environ.get("PORT", "10000"))
 BASE_DIR = Path(__file__).parent.resolve()
 SCHEDULES_FILE = BASE_DIR / "schedules.json"
@@ -85,23 +87,27 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/create":
-            length = int(self.headers.get("Content-Length", 0))
-            raw = self.rfile.read(length)
             try:
-                data = json.loads(raw.decode("utf-8"))
-            except json.JSONDecodeError:
-                self.send_json(400, {"error": "invalid JSON"})
-                return
-            title = data.get("title", "").strip()
-            date = data.get("date", "").strip()
-            if not title or not date:
-                self.send_json(400, {"error": "title and date are required"})
-                return
-            schedules = load_schedules()
-            new = {"id": str(uuid.uuid4()), "title": title, "date": date, "time": data.get("time", "").strip(), "description": data.get("description", "").strip(), "created": datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%dT%H:%M:%S+0900")}
-            schedules.append(new)
-            save_schedules(schedules)
-            self.send_json(201, {"success": True, "schedule": new})
+                length = int(self.headers.get("Content-Length", 0))
+                raw = self.rfile.read(length)
+                try:
+                    data = json.loads(raw.decode("utf-8"))
+                except json.JSONDecodeError:
+                    self.send_json(400, {"error": "invalid JSON"})
+                    return
+                title = data.get("title", "").strip()
+                date = data.get("date", "").strip()
+                if not title or not date:
+                    self.send_json(400, {"error": "title and date are required"})
+                    return
+                schedules = load_schedules()
+                new = {"id": str(uuid.uuid4()), "title": title, "date": date, "time": data.get("time", "").strip(), "description": data.get("description", "").strip(), "created": datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%dT%H:%M:%S+0900")}
+                schedules.append(new)
+                save_schedules(schedules)
+                self.send_json(201, {"success": True, "schedule": new})
+            except Exception as exc:
+                logger.error("POST /create error: %s", exc)
+                self.send_json(500, {"error": str(exc)})
             return
         self.send_json(404, {"error": "not found"})
 
