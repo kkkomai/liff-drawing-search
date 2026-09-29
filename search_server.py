@@ -86,10 +86,16 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(404, {"error": "not found"})
 
     def do_POST(self):
-        if self.path == "/create":
+        # POST /schedules (LIFF form.html) and POST /create (legacy) share the same create path.
+        if self.path.split("?")[0] in ("/create", "/schedules"):
             try:
                 length = int(self.headers.get("Content-Length", 0))
-                raw = self.rfile.read(length)
+                raw = b""
+                while len(raw) < length:
+                    chunk = self.rfile.read(min(length - len(raw), 8192))
+                    if not chunk:
+                        break
+                    raw += chunk
                 text = raw.decode("utf-8", errors="replace")
                 try:
                     data = json.loads(text)
