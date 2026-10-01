@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<title>お弁当注文</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- ========== スプラッシュ / 認証 ========== -->
+<div id="splash" class="splash">
+  <div class="spinner" id="splash-spinner"></div>
+  <h2 id="splash-title">読み込み中…</h2>
+  <p id="splash-msg">お弁当注文画面を準備しています。</p>
+  <p id="splash-detail" class="hidden"></p>
+  <button id="splash-retry" class="linkbtn hidden">再読み込み</button>
+</div>
+
+<!-- ========== メインアプリ ========== -->
+<div id="app" class="app hidden">
+
+  <header class="app-header">
+    <div class="row">
+      <div>
+        <h1>お弁当注文</h1>
+      </div>
+      <div class="user">
+        <strong id="user-name">—</strong>
+        <span class="today" id="user-today"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- 管理者モード切替（admin のみ表示） -->
+  <nav class="tabs hidden" id="bento-tabs">
+    <button type="button" data-view="employee" class="active">自分の注文</button>
+    <button type="button" data-view="admin">管理者一覧</button>
+  </nav>
+
+  <!-- ======== 従業員ビュー ======== -->
+  <section id="view-employee">
+    <div class="card">
+      <h2>期間</h2>
+      <div class="segment" id="range-seg">
+        <button type="button" data-range="today">今日</button>
+        <button type="button" data-range="week" class="active">今週</button>
+        <button type="button" data-range="all">全期間</button>
+      </div>
+      <div class="toolbar period-nav" style="margin-top:8px">
+        <button type="button" class="linkbtn" id="btn-prev">&lt;&lt; 前</button>
+        <span class="range-label" id="range-label"></span>
+        <button type="button" class="linkbtn" id="btn-next">次 &gt;&gt;</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="list-title">日付ごとの注文</h2>
+      <div class="filters" id="emp-filters">
+        <button type="button" class="chip active" data-filter="all">すべて</button>
+        <button type="button" class="chip" data-filter="unregistered">未登録のみ</button>
+        <button type="button" class="chip" data-filter="needed">必要のみ</button>
+      </div>
+      <ul class="day-list" id="day-list"></ul>
+      <p class="sub" id="emp-empty" style="display:none;color:var(--muted);font-size:13px">
+        条件に該当する日がありません。
+      </p>
+    </div>
+  </section>
+
+  <!-- ======== 管理者ビュー ======== -->
+  <section id="view-admin" class="hidden">
+    <div class="card">
+      <h2>集計</h2>
+      <div class="toolbar">
+        <button type="button" class="linkbtn" id="admin-prev">&lt;&lt;</button>
+        <span class="spacer"></span>
+        <span id="admin-date-label" style="font-weight:700"></span>
+        <span class="spacer"></span>
+        <button type="button" class="linkbtn" id="admin-next">&gt;&gt;</button>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="linkbtn" id="admin-today-btn">今日へ</button>
+        <input type="date" id="admin-date-picker" style="font-size:13px;padding:6px;border:1px solid var(--border);border-radius:8px">
+      </div>
+      <div class="summary-grid" id="admin-summary"></div>
+    </div>
+
+    <div class="card">
+      <h2>社員別ステータス</h2>
+      <div class="filters" id="admin-filters">
+        <button type="button" class="chip active" data-filter="all">全員</button>
+        <button type="button" class="chip" data-filter="needed">必要のみ</button>
+        <button type="button" class="chip" data-filter="not_needed">不要のみ</button>
+        <button type="button" class="chip" data-filter="unregistered">未登録のみ</button>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr><th>番号</th><th>氏名</th><th>状態</th><th>最終更新</th></tr>
+          </thead>
+          <tbody id="admin-table-body"></tbody>
+        </table>
+      </div>
+      <div class="emp-cards" id="admin-cards"></div>
+    </div>
+  </section>
+</div>
+
+<!-- ========== トースト ========== -->
+<div class="toast" id="toast"></div>
+
+<!-- ========== 確認 / エラーモーダル ========== -->
+<div class="modal-backdrop" id="modal-backdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h3 id="modal-title">確認</h3>
+    <p id="modal-msg"></p>
+    <div class="actions">
+      <button type="button" id="modal-cancel">キャンセル</button>
+      <button type="button" id="modal-ok" class="primary">OK</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.line-scripts.com/liff-sdk/2.24.0/liff.js"></script>
+<!-- 環境設定（js/env.js は gitignore 済み。tools/build-env.js が生成する） -->
+<script src="js/env.js"></script>
+<script src="js/config.js"></script>
+<script src="js/date-util.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
