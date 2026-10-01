@@ -94,6 +94,7 @@
   <div class="tabs" id="tabs">
       <button id="tab-overtime-btn" class="tab active" data-tab="overtime" ontouchstart="switchTab('overtime')" onclick="switchTab('overtime')">残業申請</button>
       <button id="tab-paid-btn" class="tab" data-tab="paid" ontouchstart="switchTab('paid')" onclick="switchTab('paid')">有給申請</button>
+      <button id="tab-bento-btn" class="tab" data-tab="bento" ontouchstart="switchTab('bento')" onclick="switchTab('bento')">お弁当注文</button>
 
     </div>
 
@@ -195,6 +196,15 @@
     <div id="paid-histories" style="margin-top: 20px;"></div>
   </div>
 
+  <div class="tab-content" id="tab-bento">
+    <!-- Bento ordering app, served from the bento-liff project. Loaded lazily
+         so the form tabs stay fast; credentials are handed over via postMessage
+         because liff.init cannot run twice in one document. -->
+    <iframe id="bento-frame" title="お弁当注文"
+            style="width:100%;height:calc(100vh - 120px);min-height:520px;border:0;display:block;background:#f5f6f8;"
+            data-src="bento/index.html?embedded=1"></iframe>
+  </div>
+
   
 
   <div class="editor-overlay" id="editor-overlay" style="display:none !important;">
@@ -249,7 +259,56 @@
         targetTab.style.fontWeight = 'bold';
       }
       console.log('switchTab: showing ' + tabName);
+      if (tabName === 'bento') ensureBentoFrame();
     }
+    // === BENTO TAB (iframe + postMessage credential handoff) ===
+    // お弁当注文バックエンドの公開ベースURL。1箇所だけ直せば全タブに効く。
+    // 空文字なら同一オリジン運用（bento をこのサーバーと同じホストに配る場合）。
+    var BENTO_API_BASE = '';
+    var bentoRetries = 0;
+    function ensureBentoFrame() {
+      var frame = document.getElementById('bento-frame');
+      if (!frame) return;
+      if (frame.dataset.loaded === '1') { sendBentoCredentials(); return; }
+      // The bento backend runs on its own origin. Single source of truth is
+      // BENTO_API_BASE; ?bentoApi= overrides it for local verification only.
+      var api = new URLSearchParams(window.location.search).get('bentoApi') || BENTO_API_BASE;
+      frame.src = frame.dataset.src + (api ? ('&bentoApi=' + encodeURIComponent(api)) : '');
+      frame.dataset.loaded = '1';
+      console.log('ensureBentoFrame: loading ' + frame.src);
+      sendBentoCredentials();
+    }
+    // liff.init can only run once per document, so the bento app inside the
+    // iframe cannot initialise LIFF itself. The host passes the ID token down.
+    function sendBentoCredentials() {
+      var frame = document.getElementById('bento-frame');
+      if (!frame || !frame.contentWindow) return;
+      if (typeof liff === 'undefined' || !liff.idToken) {
+        // liff.init has not finished yet. The iframe asked before the SDK was
+        if (bentoRetries < 20) {
+          bentoRetries++;
+          console.log('sendBentoCredentials: LIFF not ready yet, retrying');
+          setTimeout(sendBentoCredentials, 300);
+        }
+        return;
+      }
+      bentoRetries = 0;
+      frame.contentWindow.postMessage({
+        type: 'bento-credentials',
+        idToken: liff.idToken,
+        apiBase: new URLSearchParams(window.location.search).get('bentoApi') || BENTO_API_BASE
+      }, '*');
+      console.log('sendBentoCredentials: sent to bento iframe');
+    }
+    function resetBentoCredentials() {
+      bentoRetries = 0;
+    }
+    // The iframe asks for credentials once it boots; answer immediately.
+    window.addEventListener('message', function (ev) {
+      if (!ev.data || ev.data.type !== 'bento-ready') return;
+      console.log('bento iframe requested credentials');
+      sendBentoCredentials();
+    });
 
     // === LOGGING ===
     var logEl = document.getElementById('debug-log');

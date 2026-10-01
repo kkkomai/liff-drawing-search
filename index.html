@@ -96,6 +96,7 @@
       <button id="tab-paid-btn" class="tab" data-tab="paid" ontouchstart="switchTab('paid')" onclick="switchTab('paid')">有給申請</button>
       <button id="tab-search-btn" class="tab" data-tab="search" ontouchstart="switchTab('search')" onclick="switchTab('search')">類似検索</button>
       <button id="tab-adjust-btn" class="tab" data-tab="adjust" ontouchstart="switchTab('adjust')" onclick="switchTab('adjust')">画像調整</button>
+      <button id="tab-bento-btn" class="tab" data-tab="bento" ontouchstart="switchTab('bento')" onclick="switchTab('bento')">お弁当注文</button>
     </div>
 
   <div class="tab-content active" id="tab-overtime">
@@ -252,6 +253,15 @@
     <div style="margin-top:10px;font-size:12px;color:#666;text-align:center;">指でドラッグ / ピンチで拡大縮小</div>
   </div>
 
+  <div class="tab-content" id="tab-bento">
+    <!-- Bento ordering app, served from the bento-liff project. Loaded lazily
+         so the drawing-search tabs stay fast; credentials are handed over via
+         postMessage because liff.init cannot run twice in one document. -->
+    <iframe id="bento-frame" title="お弁当注文"
+            style="width:100%;height:calc(100vh - 120px);min-height:520px;border:0;display:block;background:#f5f6f8;"
+            data-src="bento/index.html?embedded=1"></iframe>
+  </div>
+
   <div class="editor-overlay" id="editor-overlay" style="display:none !important;">
     <div class="editor-header">
       <span>画像編集（4:3 / 3:4）</span>
@@ -303,7 +313,88 @@
       }
       console.log('switchTab: showing ' + tabName);
       console.log('switchTab called: ' + tabName);
+      if (tabName === 'bento') ensureBentoFrame();
     }
+
+    // === BENTO TAB (iframe + postMessage credential handoff) ===
+    // お弁当注文バックエンドの公開ベースURL。1箇所だけ直せば全タブに効く。
+    // 空文字なら同一オリジン運用（bento をこのサーバーと同じホストに配る場合）。
+    var BENTO_API_BASE = '';
+    // liff.init can only run once per document, so the bento app inside the
+    // iframe cannot initialise LIFF itself. The host passes the ID token down.
+    function ensureBentoFrame() {
+      var frame = document.getElementById('bento-frame');
+      if (!frame) return;
+      if (!frame.src) {
+        // The bento backend runs on its own origin. Single source of truth is
+        // BENTO_API_BASE; ?bentoApi= overrides it for local verification only.
+        var api = new URLSearchParams(window.location.search).get('bentoApi') || BENTO_API_BASE;
+        var src = frame.getAttribute('data-src');
+        // config.js already reads ?api=, so hand it over in the query string.
+        frame.src = api ? src + '&api=' + encodeURIComponent(api) : src;
+        log('ensureBentoFrame: loading ' + frame.src);
+      }
+      sendBentoCredentials();
+    }
+
+    function sendBentoCredentials() {
+      var frame = document.getElementById('bento-frame');
+      if (!frame || !frame.contentWindow) return;
+      var payload = {
+        type: 'bento-credentials',
+        lineUserId: null,
+        idToken: null
+      };
+      try {
+        payload.lineUserId = liff.getContext().userId || null;
+      } catch (e) {
+        payload.lineUserId = null;
+      }
+      try {
+        var decoded = liff.getDecodedIDToken();
+        payload.idToken = decoded && decoded.jwt ? decoded.jwt : null;
+      } catch (e) {
+        payload.idToken = null;
+      }
+      if (!payload.lineUserId) {
+        // liff.init has not finished yet. The iframe asked before the SDK was
+        // ready, so retry on a timer instead of dropping the request.
+        log('sendBentoCredentials: LIFF not ready yet, retrying');
+        scheduleBentoCredentials();
+        return;
+      }
+      frame.contentWindow.postMessage(payload, window.location.origin);
+      log('sendBentoCredentials: sent to bento iframe');
+    }
+
+    // The iframe can ask for credentials long before liff.init resolves, so keep
+    // trying briefly. Bounded so a genuine auth failure still surfaces as an
+    // error inside the iframe instead of an endless silent retry.
+    var bentoRetryTimer = null;
+    var BENTO_MAX_RETRIES = 20;
+    var bentoRetries = 0;
+    function scheduleBentoCredentials() {
+      if (bentoRetryTimer) return;
+      if (bentoRetries >= BENTO_MAX_RETRIES) {
+        log('sendBentoCredentials: giving up after ' + bentoRetries + ' retries', true);
+        return;
+      }
+      bentoRetries++;
+      bentoRetryTimer = setTimeout(function () {
+        bentoRetryTimer = null;
+        sendBentoCredentials();
+      }, 300);
+    }
+    function resetBentoCredentials() {
+      bentoRetries = 0;
+    }
+
+    // The iframe asks for credentials once it boots; answer immediately.
+    window.addEventListener('message', function (ev) {
+      if (!ev.data || ev.data.type !== 'bento-ready') return;
+      log('bento iframe requested credentials');
+      sendBentoCredentials();
+    });
 
     // === LOGGING ===
     var logEl = document.getElementById('debug-log');
@@ -345,6 +436,9 @@
               log('Tab switched to index ' + index);
               if (tab.getAttribute('data-tab') === 'overtime') {
                 renderOvertimeCalendar();
+              }
+              if (tab.getAttribute('data-tab') === 'bento') {
+                ensureBentoFrame();
               }
             }
             tab.addEventListener('touchstart', handleTabSwitch);
@@ -1438,6 +1532,10 @@
         ]);
         if (result !== 'timeout') {
           log('initLiff: liff.init SUCCESS');
+          // The bento tab may already be waiting on credentials; hand them over
+          // now instead of making it poll.
+          resetBentoCredentials();
+          sendBentoCredentials();
         }
       } catch (err) {
         log('initLiff: liff.init ERROR: ' + err.message, true);
