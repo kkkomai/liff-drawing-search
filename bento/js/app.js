@@ -101,7 +101,10 @@
       var settled = false;
       function accept(creds) {
         if (settled) return;
-        if (!creds || !creds.lineUserId) return;
+        // lineUserId is required downstream (STATE.employee lookup), but silently
+        // dropping the payload here produced a bare 15s stall with no diagnostic.
+        // Accept whatever the host sent and let the login call report the gap.
+        if (!creds || (!creds.lineUserId && !creds.idToken)) return;
         settled = true;
         global.removeEventListener('message', onMessage);
         resolve(creds);

@@ -293,12 +293,39 @@
         return;
       }
       bentoRetries = 0;
+      // The iframe's accept() ignores the payload unless lineUserId is present
+      // (see waitForHostCredentials in bento/js/app.js). liff.getDecodedID()
+      // resolves server-side from the ID token, so it cannot be spoofed by the
+      // page; fall back to decoding the JWT so the tab still works when the
+      // LIFF context has not finished resolving yet.
       frame.contentWindow.postMessage({
         type: 'bento-credentials',
         idToken: liff.idToken,
+        lineUserId: resolveLineUserId(),
         apiBase: new URLSearchParams(window.location.search).get('bentoApi') || BENTO_API_BASE
       }, '*');
       console.log('sendBentoCredentials: sent to bento iframe');
+    }
+    function resolveLineUserId() {
+      // Preferred: LIFF's server-verified decoded ID.
+      try {
+        if (liff && typeof liff.getDecodedID === 'function') {
+          var decoded = liff.getDecodedID();
+          if (decoded) return String(decoded);
+        }
+      } catch (e) {
+        console.log('resolveLineUserId: getDecodedID unavailable: ' + e.message);
+      }
+      // Fallback: pull the `sub` claim out of the ID token. This is NOT verified
+      // server-side — the bento backend still validates the token itself.
+      try {
+        var token = (liff && liff.idToken) || '';
+        var payload = JSON.parse(atob(token.split('.')[1] || ''));
+        if (payload && payload.sub) return String(payload.sub);
+      } catch (e) {
+        console.log('resolveLineUserId: JWT decode failed: ' + e.message);
+      }
+      return '';
     }
     function resetBentoCredentials() {
       bentoRetries = 0;
