@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001a</title>
-  <script>window.__v="20261001a";</script>
+  <title>申請フォーム - v20261001b</title>
+  <script>window.__v="20261001b";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -285,10 +285,21 @@
       if (!frame || !frame.contentWindow) return;
       if (typeof liff === 'undefined' || !liff.idToken) {
         // liff.init has not finished yet. The iframe asked before the SDK was
-        if (bentoRetries < 20) {
+        if (bentoRetries < 40) {
           bentoRetries++;
           console.log('sendBentoCredentials: LIFF not ready yet, retrying');
           setTimeout(sendBentoCredentials, 300);
+        } else {
+          // Tell the iframe WHY it is stuck instead of leaving it on the
+          // splash forever. The iframe owns the retry budget for its own
+          // handshake, so it must learn about this failure to stop waiting.
+          console.log('sendBentoCredentials: giving up — LIFF ID token never arrived');
+          frame.contentWindow.postMessage({
+            type: 'bento-auth-error',
+            message: typeof liff === 'undefined'
+              ? 'LINE LIFF SDK が読み込まれていません。'
+              : 'LINE の認証が完了しませんでした（liff.init が未解決または失敗）。'
+          }, '*');
         }
         return;
       }

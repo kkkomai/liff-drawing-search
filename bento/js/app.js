@@ -636,12 +636,33 @@
     // Embedded in the application form: boot as soon as the host hands over
     // credentials. The host may already be listening, so announce readiness
     // both now and on DOMContentLoaded to cover either boot order.
+    //
+    // The watchdog below matters: if the host never delivers credentials
+    // (LIFF init failed, SDK blocked), start() would never be called and the
+    // splash would stay forever with no diagnostic. Surface the failure instead.
+    var WATCHDOG_MS = 45000;
     function announceReady() { global.parent.postMessage({ type: 'bento-ready' }, global.location.origin); }
+    function showHostAuthFailure(message) {
+      showSplash('LINE認証が必要です', message || 'ホストページから認証情報を受け取れませんでした。',
+                 '申請フォーム（LINE内）から開き直してください。', true);
+    }
     global.addEventListener('message', function (ev) {
-      if (!ev.data || ev.data.type !== 'bento-credentials') return;
-      announceReady = function () {};
-      start();
+      var d = ev.data;
+      if (!d) return;
+      if (d.type === 'bento-credentials') {
+        clearTimeout(hostWatchdog);
+        announceReady = function () {};
+        start();
+        return;
+      }
+      if (d.type === 'bento-auth-error') {
+        clearTimeout(hostWatchdog);
+        showHostAuthFailure(d.message);
+      }
     });
+    var hostWatchdog = setTimeout(function () {
+      showHostAuthFailure('ホストページから LINE 認証情報を受信できませんでした（45秒タイムアウト）。');
+    }, WATCHDOG_MS);
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', announceReady);
     } else {
