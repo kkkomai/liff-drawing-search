@@ -188,14 +188,42 @@ if __name__ == "__main__":
     #
     # If uvicorn or the ASGI app is unavailable (e.g. dependencies not yet
     # installed), fall back to the original ThreadingHTTPServer so the form
-    # site stays reachable and /health still answers.
+    # site stays reachable — and publish WHY, because a silent fallback looks
+    # exactly like "the change did not deploy".
+    _asgi_error = ""
     try:
         import uvicorn  # noqa: F401
         from asgi_app import app as asgi_app_instance  # noqa: F401
     except Exception as exc:  # pragma: no cover - degraded but still serving
-        logger.warning("ASGI app unavailable (%s); falling back to http.server", exc)
+        _asgi_error = f"{exc.__class__.__name__}: {exc}"
+        logger.warning("ASGI app unavailable (%s); falling back to http.server", _asgi_error)
+        os.environ["BENTO_ASGI_IMPORT_ERROR"] = _asgi_error
+
+        # Surface it on /health so a failed import is visible from outside
+        # instead of being buried in the deploy log.
+        def _health_with_reason(_handler) -> None:
+            body = json.dumps(
+                {"status": "ok", "port": PORT, "asgi": "unavailable", "asgi_import_error": _asgi_error},
+                ensure_ascii=False,
+            ).encode("utf-8")
+            _handler.send_response(200)
+            _handler.send_header("Content-Type", "application/json; charset=utf-8")
+            _handler.send_header("Content-Length", str(len(body)))
+            _handler.end_headers()
+            _handler.wfile.write(body)
+
+        Handler.do_GET_backup = Handler.do_GET
+
+        def _do_GET(self) -> None:  # noqa: N802 - stdlib naming
+            if self.path.split("?")[0] == "/health":
+                _health_with_reason(self)
+                return
+            Handler.do_GET_backup(self)
+
+        Handler.do_GET = _do_GET
+
         server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-        print(f"Server starting on port {PORT}...")
+        print(f"Server starting on port {PORT} (FALLBACK: {_asgi_error})")
         server.serve_forever()
     else:
         import uvicorn
