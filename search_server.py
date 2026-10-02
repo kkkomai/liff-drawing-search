@@ -3,7 +3,7 @@
 
 import json
 import logging
-import os, subprocess, uuid
+import os, subprocess, sys, uuid
 from datetime import datetime, timezone, timedelta
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
@@ -186,47 +186,73 @@ if __name__ == "__main__":
     # and gives local and deployed runs the exact same code path, instead of
     # two servers whose behaviour drifts.
     #
-    # If uvicorn or the ASGI app is unavailable (e.g. dependencies not yet
-    # installed), fall back to the original ThreadingHTTPServer so the form
-    # site stays reachable — and publish WHY, because a silent fallback looks
-    # exactly like "the change did not deploy".
+    # On Render the Build Command installs into a different environment than the
+    # `python3` that runs the Start Command — the build log shows
+    # "Successfully installed uvicorn" followed immediately by
+    # "No module named 'uvicorn'" at startup. So if the import fails, install
+    # into THIS interpreter (sys.executable -m pip) and retry once. That keeps
+    # the fix in the repo instead of relying on a dashboard setting we cannot
+    # verify, and it is a no-op wherever the deps are already present.
+    #
+    # If it still cannot be imported, fall back to the original
+    # ThreadingHTTPServer so the form site stays reachable — and publish WHY,
+    # because a silent fallback looks exactly like "the change did not deploy".
     _asgi_error = ""
+_asgi_app = None
+try:
+    import uvicorn  # noqa: F401
+    from asgi_app import app as asgi_app_instance  # noqa: F401
+
+    _asgi_app = asgi_app_instance
+except Exception as first_exc:  # noqa: BLE001 - any import failure retries
+    logger.warning("ASGI import failed (%s); installing deps into %s", first_exc, sys.executable)
     try:
-        import uvicorn  # noqa: F401
-        from asgi_app import app as asgi_app_instance  # noqa: F401
-    except Exception as exc:  # pragma: no cover - degraded but still serving
-        _asgi_error = f"{exc.__class__.__name__}: {exc}"
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+             "-r", str(BASE_DIR / "requirements.txt")],
+            check=True, timeout=600,
+        )
+        import uvicorn  # noqa: F811
+        from asgi_app import app as asgi_app_instance  # noqa: F811
+
+        _asgi_app = asgi_app_instance
+        logger.warning("deps installed; ASGI app now available")
+    except Exception as retry_exc:  # pragma: no cover - still degraded
+        _asgi_error = f"{retry_exc.__class__.__name__}: {retry_exc}"
         logger.warning("ASGI app unavailable (%s); falling back to http.server", _asgi_error)
-        os.environ["BENTO_ASGI_IMPORT_ERROR"] = _asgi_error
 
-        # Surface it on /health so a failed import is visible from outside
-        # instead of being buried in the deploy log.
-        def _health_with_reason(_handler) -> None:
-            body = json.dumps(
-                {"status": "ok", "port": PORT, "asgi": "unavailable", "asgi_import_error": _asgi_error},
-                ensure_ascii=False,
-            ).encode("utf-8")
-            _handler.send_response(200)
-            _handler.send_header("Content-Type", "application/json; charset=utf-8")
-            _handler.send_header("Content-Length", str(len(body)))
-            _handler.end_headers()
-            _handler.wfile.write(body)
+if _asgi_app is not None:
+    # Primary path. Reached either directly or after the self-install above.
+    import uvicorn
 
-        Handler.do_GET_backup = Handler.do_GET
+    print(f"Server starting on port {PORT} (ASGI app)...")
+    uvicorn.run(_asgi_app, host="0.0.0.0", port=PORT, log_level="info")
+else:
+    # Degraded path: keep the form site reachable and publish WHY, because a
+    # silent fallback looks exactly like "the change did not deploy".
+    os.environ["BENTO_ASGI_IMPORT_ERROR"] = _asgi_error
 
-        def _do_GET(self) -> None:  # noqa: N802 - stdlib naming
-            if self.path.split("?")[0] == "/health":
-                _health_with_reason(self)
-                return
-            Handler.do_GET_backup(self)
+    def _health_with_reason(_handler) -> None:
+        body = json.dumps(
+            {"status": "ok", "port": PORT, "asgi": "unavailable", "asgi_import_error": _asgi_error},
+            ensure_ascii=False,
+        ).encode("utf-8")
+        _handler.send_response(200)
+        _handler.send_header("Content-Type", "application/json; charset=utf-8")
+        _handler.send_header("Content-Length", str(len(body)))
+        _handler.end_headers()
+        _handler.wfile.write(body)
 
-        Handler.do_GET = _do_GET
+    Handler.do_GET_backup = Handler.do_GET
 
-        server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-        print(f"Server starting on port {PORT} (FALLBACK: {_asgi_error})")
-        server.serve_forever()
-    else:
-        import uvicorn
+    def _do_GET(self) -> None:  # noqa: N802 - stdlib naming
+        if self.path.split("?")[0] == "/health":
+            _health_with_reason(self)
+            return
+        Handler.do_GET_backup(self)
 
-        print(f"Server starting on port {PORT} (ASGI app)...")
-        uvicorn.run(asgi_app_instance, host="0.0.0.0", port=PORT, log_level="info")
+    Handler.do_GET = _do_GET
+
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    print(f"Server starting on port {PORT} (FALLBACK: {_asgi_error})")
+    server.serve_forever()
