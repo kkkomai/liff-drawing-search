@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001d</title>
-  <script>window.__v="20261001d";</script>
+  <title>申請フォーム - v20261001e</title>
+  <script>window.__v="20261001e";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -488,37 +488,44 @@
     }
 
     // === EDITOR CONTROLS ===
-    document.getElementById('rotate-left').addEventListener('click', function() {
+var __el = document.getElementById('rotate-left');
+    if (__el) __el.addEventListener('click', function() {
       editorState.rotation -= 90;
       drawEditor();
       log('rotate -90');
     });
-    document.getElementById('rotate-right').addEventListener('click', function() {
+var __el = document.getElementById('rotate-right');
+    if (__el) __el.addEventListener('click', function() {
       editorState.rotation += 90;
       drawEditor();
       log('rotate +90');
     });
-    document.getElementById('zoom-in').addEventListener('click', function() {
+var __el = document.getElementById('zoom-in');
+    if (__el) __el.addEventListener('click', function() {
       editorState.scale *= 1.15;
       drawEditor();
       log('zoom in');
     });
-    document.getElementById('zoom-out').addEventListener('click', function() {
+var __el = document.getElementById('zoom-out');
+    if (__el) __el.addEventListener('click', function() {
       editorState.scale /= 1.15;
       drawEditor();
       log('zoom out');
     });
-    document.getElementById('aspect-4-3').addEventListener('click', function() {
+var __el = document.getElementById('aspect-4-3');
+    if (__el) __el.addEventListener('click', function() {
       editorState.aspectRatio = 4/3;
       drawEditor();
       log('aspect 4:3');
     });
-    document.getElementById('aspect-3-4').addEventListener('click', function() {
+var __el = document.getElementById('aspect-3-4');
+    if (__el) __el.addEventListener('click', function() {
       editorState.aspectRatio = 3/4;
       drawEditor();
       log('aspect 3:4');
     });
-    document.getElementById('editor-done').addEventListener('click', function() {
+var __el = document.getElementById('editor-done');
+    if (__el) __el.addEventListener('click', function() {
       if (editorOverlay) editorOverlay.classList.remove('active');
       log('Editor done');
     });
@@ -796,27 +803,32 @@
       log('adjustFileInput listener attached');
     }
 
-    document.getElementById('rotate-left').addEventListener('click', function() {
+var __el = document.getElementById('rotate-left');
+    if (__el) __el.addEventListener('click', function() {
       adjustState.rotation -= 90;
       drawAdjustCanvas();
       log('adjust rotate -90');
     });
-    document.getElementById('rotate-right').addEventListener('click', function() {
+var __el = document.getElementById('rotate-right');
+    if (__el) __el.addEventListener('click', function() {
       adjustState.rotation += 90;
       drawAdjustCanvas();
       log('adjust rotate +90');
     });
-    document.getElementById('zoom-in').addEventListener('click', function() {
+var __el = document.getElementById('zoom-in');
+    if (__el) __el.addEventListener('click', function() {
       adjustState.scale *= 1.15;
       drawAdjustCanvas();
       log('adjust zoom in');
     });
-    document.getElementById('zoom-out').addEventListener('click', function() {
+var __el = document.getElementById('zoom-out');
+    if (__el) __el.addEventListener('click', function() {
       adjustState.scale /= 1.15;
       drawAdjustCanvas();
       log('adjust zoom out');
     });
-    document.getElementById('adjust-aspect').addEventListener('change', function() {
+var __el = document.getElementById('adjust-aspect');
+    if (__el) __el.addEventListener('change', function() {
       adjustState.aspectRatio = eval(this.value);
       drawAdjustCanvas();
       log('adjust aspect: ' + this.value);
