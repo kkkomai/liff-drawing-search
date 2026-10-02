@@ -10,6 +10,6 @@
 window.__BENTO_ENV__ = {
   appEnv: 'prod',
   apiBaseUrl: '',                      // '' => same origin
-  liffId: '2011376207-0e7oVVOT',       // parent LIFF app (for display only)
+  liffId: '2011376207-0e7oVWOT',       // parent LIFF app (for display only)
   devToken: ''                         // always empty in production
 };
