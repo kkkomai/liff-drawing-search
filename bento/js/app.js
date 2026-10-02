@@ -669,12 +669,22 @@
       if (d.type === 'bento-credentials') {
         clearTimeout(hostWatchdog);
         announceReady = function () {};
+        if (global.__hostAuthFailed) {
+          global.__hostAuthFailed = false;
+          showSplash('お弁当注文画面を準備しています..', '認証情報を確認しました。', '', false);
+        }
         start();
         return;
       }
       if (d.type === 'bento-auth-error') {
         clearTimeout(hostWatchdog);
         showHostAuthFailure(d.message);
+        // Stay recoverable. The host gives up after its own retry budget, but
+        // liff.init() can still resolve afterwards (cold SDK load, or a Scope
+        // change saved in the console a moment ago). When the real credentials
+        // land, clear the failure and boot for real instead of leaving the user
+        // stuck on an error that is no longer true.
+        global.__hostAuthFailed = true;
       }
     });
     var hostWatchdog = setTimeout(function () {

@@ -315,7 +315,11 @@
     // trying briefly. Bounded so a genuine auth failure still surfaces as an
     // error inside the iframe instead of an endless silent retry.
     var bentoRetryTimer = null;
-    var BENTO_MAX_RETRIES = 20;
+    // 300ms x 90 = 27s. The old budget was 20 (6s), which expires before a
+    // cold liff.init() in the LINE WebView has finished loading the SDK and
+    // the platform context — the iframe then showed "LINE認証が必要です" on a
+    // perfectly healthy app. Keep this comfortably above a slow init.
+    var BENTO_MAX_RETRIES = 90;
     var bentoRetries = 0;
     // Explain WHY LIFF is unusable, rather than always saying the same thing.
     // initLiff() records the concrete failure; without this the user sees one
