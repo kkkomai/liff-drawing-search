@@ -2,10 +2,18 @@
 # search_server.py itself is still stdlib-only; these are needed because
 # uvicorn now serves the site instead.
 fastapi>=0.115
-uvicorn[standard]>=0.30
+# Plain uvicorn, not uvicorn[standard]: the [standard] extra pulls uvloop,
+# httptools, watchfiles and websockets, all of which compile native extensions.
+# On Render's build image one of those failing aborts the whole pip install, so
+# uvicorn itself never lands and the app silently degrades to http.server.
+uvicorn>=0.30
 pydantic>=2.7
 pydantic-settings>=2.3
-PyJWT[crypto]>=2.8
+# ID-token verification is RS256 (RSASSA-PKCS1-v1_5). PyJWT does the JWT
+# parsing; cryptography does the RSA math. cryptography publishes manylinux
+# wheels, so pip takes the prebuilt path instead of compiling from source.
+PyJWT>=2.8
+cryptography>=42.0
 httpx>=0.27
 # Windows has no system tz database, so ZoneInfo("Asia/Tokyo") needs this.
 tzdata>=2024.1
