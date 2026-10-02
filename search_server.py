@@ -207,11 +207,19 @@ try:
 except Exception as first_exc:  # noqa: BLE001 - any import failure retries
     logger.warning("ASGI import failed (%s); installing deps into %s", first_exc, sys.executable)
     try:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+        # No --quiet: when this fails on Render the error text is the only clue,
+        # and it has to reach /health because the deploy log is not always
+        # reachable from the browser. --user targets the user site-packages that
+        # a runtime (non-build) pip on some images refuses to touch otherwise.
+        _pip = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--user", "--disable-pip-version-check",
              "-r", str(BASE_DIR / "requirements.txt")],
-            check=True, timeout=600,
+            capture_output=True, text=True, timeout=600,
         )
+        if _pip.returncode != 0:
+            raise RuntimeError(
+                "pip exit %d: %s" % (_pip.returncode, (_pip.stderr or _pip.stdout or "")[-400:])
+            )
         import uvicorn  # noqa: F811
         from asgi_app import app as asgi_app_instance  # noqa: F811
 
