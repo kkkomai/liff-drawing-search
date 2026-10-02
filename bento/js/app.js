@@ -657,7 +657,7 @@
     // The watchdog below matters: if the host never delivers credentials
     // (LIFF init failed, SDK blocked), start() would never be called and the
     // splash would stay forever with no diagnostic. Surface the failure instead.
-    var WATCHDOG_MS = 45000;
+    var WATCHDOG_MS = 90000;
     function announceReady() { global.parent.postMessage({ type: 'bento-ready' }, global.location.origin); }
     function showHostAuthFailure(message) {
       showSplash('LINE認証が必要です', message || 'ホストページから認証情報を受け取れませんでした。',
@@ -688,7 +688,7 @@
       }
     });
     var hostWatchdog = setTimeout(function () {
-      showHostAuthFailure('ホストページから LINE 認証情報を受信できませんでした（45秒タイムアウト）。');
+      showHostAuthFailure('ホストページから LINE 認証情報を受信できませんでした（90秒タイムアウト）。');
     }, WATCHDOG_MS);
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', announceReady);

@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001l</title>
-  <script>window.__v="20261001l";</script>
+  <title>申請フォーム - v20261001m</title>
+  <script>window.__v="20261001m";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -319,7 +319,9 @@
     // cold liff.init() in the LINE WebView has finished loading the SDK and
     // the platform context — the iframe then showed "LINE認証が必要です" on a
     // perfectly healthy app. Keep this comfortably above a slow init.
-    var BENTO_MAX_RETRIES = 90;
+    // 300ms x 200 = 60s, matching the initLiff budget above. Must outlast
+    // a cold Render boot, or the iframe errors out while LIFF is still starting.
+    var BENTO_MAX_RETRIES = 200;
     var bentoRetries = 0;
     // Explain WHY LIFF is unusable, rather than always saying the same thing.
     // initLiff() records the concrete failure; without this the user sees one
@@ -1497,10 +1499,15 @@ var __el = document.getElementById('adjust-aspect');
       window.__liffInitError = '';
       var timeoutPromise = new Promise(function(resolve) {
         setTimeout(function() {
-          log('initLiff: liff.init TIMEOUT after 10s', true);
-          window.__liffInitError = 'liff.init が10秒以内に解決しませんでした（SDKの読込またはLIFF通信の問題）。';
+          // 60s, not 10s. A Render free instance sleeps after ~15 min idle and
+          // needs ~50s to boot (pip install of the ASGI deps runs at start), so
+          // the SDK, index.html and the LIFF handshake can all still be in
+          // flight when a 10s budget expires — on a completely healthy app.
+          log('initLiff: liff.init TIMEOUT after 60s', true);
+          window.__liffInitError =
+            'liff.init が60秒以内に解決しませんでした（サーバーの再起動中かもしれません）。';
           resolve('timeout');
-        }, 10000);
+        }, 60000);
       });
       try {
         log('initLiff: calling liff.init...');
