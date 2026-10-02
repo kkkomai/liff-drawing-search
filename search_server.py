@@ -209,11 +209,16 @@ except Exception as first_exc:  # noqa: BLE001 - any import failure retries
     try:
         # No --quiet: when this fails on Render the error text is the only clue,
         # and it has to reach /health because the deploy log is not always
-        # reachable from the browser. --user targets the user site-packages that
-        # a runtime (non-build) pip on some images refuses to touch otherwise.
+        # reachable from the browser.
+        #
+        # --break-system-packages is required, not merely convenient: the Build
+        # Command installs into a different interpreter than the `python3` that
+        # runs this file, and Debian marks its system Python
+        # "externally-managed" (PEP 668), so a plain `pip install` is refused
+        # with exit 1. The container is disposable, so the override is safe.
         _pip = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--user", "--disable-pip-version-check",
-             "-r", str(BASE_DIR / "requirements.txt")],
+            [sys.executable, "-m", "pip", "install", "--break-system-packages",
+             "--disable-pip-version-check", "-r", str(BASE_DIR / "requirements.txt")],
             capture_output=True, text=True, timeout=600,
         )
         if _pip.returncode != 0:
