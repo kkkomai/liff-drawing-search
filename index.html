@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001c</title>
+  <title>申請フォーム - v20261001d</title>
   <script>window.__v="20261001c";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
@@ -1494,6 +1494,11 @@
     // === START ===
     log('Starting...');
     log('Calling initLiff...');
+    // Kick LIFF off without awaiting it. liff.init() can hang for its full 10s
+    // timeout inside LINE, and awaiting it here delayed every UI initialiser
+    // registered below (tab visibility, calendar render) until it settled —
+    // which read as "the calendar is blank". Fire and forget; anything that
+    // genuinely needs the ID token re-checks via sendBentoCredentials().
     initLiff().catch(function(e) {
       log('initLiff promise rejected: ' + e.message, true);
     });
@@ -1564,7 +1569,14 @@
         // Fallback: explicitly ensure active tab content is visible
         var activeTab = document.querySelector('.tab-content.active');
         if (activeTab) { activeTab.style.display = 'block'; }
-        
+
+        // Wire the tab buttons. This used to be defined but never invoked, so
+        // only the inline ontouchstart/onclick handlers were live and the
+        // calendar never rendered on first paint.
+        if (typeof initTabs === 'function') {
+          try { initTabs(); } catch (e) { log('initTabs failed: ' + e.message, true); }
+        }
+
         log("DOMContentLoaded: using switchTab");
         loadSchedules(function() {
             renderOvertimeCalendar();
