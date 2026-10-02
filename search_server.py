@@ -179,6 +179,26 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"Server starting on port {PORT}...")
-    server.serve_forever()
+    # Serve through the ASGI app. The render.yaml Start Command asks for
+    # `uvicorn asgi_app:app`, but this service was created from the Render
+    # dashboard, which ignores render.yaml — so its Start Command is still
+    # `python3 search_server.py`. Booting uvicorn here keeps that command valid
+    # and gives local and deployed runs the exact same code path, instead of
+    # two servers whose behaviour drifts.
+    #
+    # If uvicorn or the ASGI app is unavailable (e.g. dependencies not yet
+    # installed), fall back to the original ThreadingHTTPServer so the form
+    # site stays reachable and /health still answers.
+    try:
+        import uvicorn  # noqa: F401
+        from asgi_app import app as asgi_app_instance  # noqa: F401
+    except Exception as exc:  # pragma: no cover - degraded but still serving
+        logger.warning("ASGI app unavailable (%s); falling back to http.server", exc)
+        server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+        print(f"Server starting on port {PORT}...")
+        server.serve_forever()
+    else:
+        import uvicorn
+
+        print(f"Server starting on port {PORT} (ASGI app)...")
+        uvicorn.run(asgi_app_instance, host="0.0.0.0", port=PORT, log_level="info")
