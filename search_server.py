@@ -225,6 +225,23 @@ except Exception as first_exc:  # noqa: BLE001 - any import failure retries
             raise RuntimeError(
                 "pip exit %d: %s" % (_pip.returncode, (_pip.stderr or _pip.stdout or "")[-400:])
             )
+        # Even a successful install can land somewhere importlib does not scan.
+        # Debian puts user site-packages under ~/.local/lib/pythonX.Y, and when
+        # HOME differs between the build and the runtime (or the dir is simply
+        # absent) that path is missing from sys.path. Register it explicitly
+        # rather than guessing why the import still fails.
+        import site
+        import sysconfig
+
+        for _p in (
+            site.getusersitepackages(),
+            sysconfig.get_paths().get("purelib"),
+            sysconfig.get_paths().get("platlib"),
+        ):
+            if _p and os.path.isdir(_p) and _p not in sys.path:
+                sys.path.insert(0, _p)
+                logger.warning("added %s to sys.path", _p)
+
         import uvicorn  # noqa: F811
         from asgi_app import app as asgi_app_instance  # noqa: F811
 
