@@ -3,5 +3,28 @@ services:
     name: liff-drawing-search
     env: python
     plan: free
-    startCommand: python3 search_server.py
+    startCommand: uvicorn asgi_app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    # Single ASGI app: the 申請フォーム static site and the お弁当注文 API share
+    # one origin, so the LIFF iframe makes same-origin requests and CORS stops
+    # being a factor. search_server.py is kept for local reference.
+    # The bento FastAPI backend lives outside this repo, so copy it in first.
+    buildCommand: |
+      if [ -d ../projects/bento-liff/backend ]; then
+        cp -r ../projects/bento-liff/backend ./bento_backend
+        pip install -r bento_backend/requirements.txt
+      else
+        pip install -r requirements.txt
+      fi
+    # Runtime env vars — set in the Render dashboard, do NOT commit:
+    #   BENTO_APP_ENV=prod
+    #   BENTO_LIFF_ID=2011376207-0e7oVWOT
+    #   BENTO_LIFF_APP_URL=https://liff.line.me/2011376207-0e7oVWOT
+    #   BENTO_PUBLIC_API_BASE_URL=https://liff-drawing-search.onrender.com
+    #   BENTO_CORS_ORIGINS=https://liff-drawing-search.onrender.com
+    #   BENTO_DATABASE_PATH=/tmp/bento.db
+    #   BENTO_LINE_CHANNEL_ID=<LIFF app's Channel ID>
+    #   BENTO_LINE_CHANNEL_SECRET=<LIFF app's Channel secret>
+    #
+    # prod refuses to boot when the LINE credentials or the https base URL are
+    # missing, so an incomplete config fails at startup, not silently later.

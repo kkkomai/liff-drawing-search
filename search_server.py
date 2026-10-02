@@ -13,6 +13,22 @@ PORT = int(os.environ.get("PORT", "10000"))
 BASE_DIR = Path(__file__).parent.resolve()
 SCHEDULES_FILE = BASE_DIR / "schedules.json"
 
+# The bento ordering app is developed in projects/bento-liff/frontend and embedded
+# here as a tab. On Render only this repo is deployed, so the files are copied into
+# bento/ at build time; locally we serve them straight from the project so there is
+# exactly one copy of the source.
+BENTO_SRC_CANDIDATES = [
+    BASE_DIR / "bento",
+    BASE_DIR.parent / "projects" / "bento-liff" / "frontend",
+]
+
+
+def resolve_bento_dir():
+    for cand in BENTO_SRC_CANDIDATES:
+        if (cand / "index.html").is_file():
+            return cand
+    return None
+
 
 def load_schedules():
     try:
@@ -40,6 +56,35 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
             self.send_json(200, {"status": "ok", "port": PORT})
+            return
+        if self.path.startswith("/bento/"):
+            bento_dir = resolve_bento_dir()
+            if bento_dir is None:
+                self.send_json(503, {
+                    "error": "bento_not_deployed",
+                    "message": "bento app not found on this server",
+                })
+                return
+            rel = self.path[len("/bento/"):].split("?")[0]
+            if not rel:
+                rel = "index.html"
+            target = (bento_dir / rel).resolve()
+            # Path traversal guard: never serve anything outside bento_dir.
+            try:
+                target.relative_to(bento_dir.resolve())
+            except ValueError:
+                self.send_json(403, {"error": "forbidden"})
+                return
+            if not target.is_file():
+                self.send_json(404, {"error": "not_found"})
+                return
+            ctype = self.guess_type(str(target))
+            body = target.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
         if self.path == "/schedules":
             schedules = load_schedules()

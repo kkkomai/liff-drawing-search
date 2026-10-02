@@ -6,3 +6,8 @@ __pycache__/
 start_ssl.py
 uploads/
 *.jpg
+node_modules/
+package-lock.json
+package.json
+# The bento backend is copied here by render.yaml's buildCommand.
+bento_backend/
