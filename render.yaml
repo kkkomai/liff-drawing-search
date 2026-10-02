@@ -8,14 +8,10 @@ services:
     # Single ASGI app: the 申請フォーム static site and the お弁当注文 API share
     # one origin, so the LIFF iframe makes same-origin requests and CORS stops
     # being a factor. search_server.py is kept for local reference.
-    # The bento FastAPI backend lives outside this repo, so copy it in first.
-    buildCommand: |
-      if [ -d ../projects/bento-liff/backend ]; then
-        cp -r ../projects/bento-liff/backend ./bento_backend
-        pip install -r bento_backend/requirements.txt
-      else
-        pip install -r requirements.txt
-      fi
+    # The bento ordering backend is committed at ./bento_backend (mirrored from
+    # projects/bento-liff/backend by sync_bento_backend.py), so there is nothing
+    # to copy here — requirements.txt already lists what the app imports.
+    buildCommand: pip install -r requirements.txt
     # Runtime env vars — set in the Render dashboard, do NOT commit:
     #   BENTO_APP_ENV=prod
     #   BENTO_LIFF_ID=2011376207-0e7oVVOT

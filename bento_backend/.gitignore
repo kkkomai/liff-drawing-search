@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/
+*.db
+*.db-wal
+*.db-shm
+.pytest_cache/
+
+# 環境設定の生成物（tools/build-env.js が作る）。環境ごとの値を誤って
+# コミットすると、本番に staging の URL が混ざるので入れない。
+frontend/js/env.js

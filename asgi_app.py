@@ -51,12 +51,12 @@ JST = timezone(timedelta(hours=9))
 
 logger = logging.getLogger("uvicorn.error")
 
-# The bento backend lives outside this repo; put it on sys.path so the routers
-# can be imported. On Render the backend is copied in next to this app (see
-# render.yaml buildCommand), so the sibling fallback covers that layout.
+# The bento backend is committed alongside this app at ./bento_backend (mirror
+# it with sync_bento_backend.py after editing projects/bento-liff/backend). The
+# development-tree path stays as a fallback so local runs work either way.
 _BENTO_CANDIDATES = [
-    BASE_DIR.parent / "projects" / "bento-liff" / "backend",
     BASE_DIR / "bento_backend",
+    BASE_DIR.parent / "projects" / "bento-liff" / "backend",
 ]
 for _cand in _BENTO_CANDIDATES:
     if _cand.is_dir() and str(_cand) not in sys.path:

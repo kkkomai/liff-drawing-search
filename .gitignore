@@ -9,5 +9,12 @@ uploads/
 node_modules/
 package-lock.json
 package.json
-# The bento backend is copied here by render.yaml's buildCommand.
-bento_backend/
+# bento_backend/ IS committed: Render can only build what is pushed, and
+# asgi_app.py imports the ordering API from there. Mirror it with
+# `python sync_bento_backend.py` after editing projects/bento-liff/backend.
+bento_backend/.env
+bento_backend/.env.local
+bento_backend/**/__pycache__/
+bento_backend/**/*.pyc
+bento_backend/data/
+bento_backend/.venv/
