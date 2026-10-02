@@ -131,7 +131,15 @@
   function authenticate() {
     if (cfg.isMockMode) {
       global.__LINE_USER_ID__ = cfg.mockLineUserId;
-      return API.login(cfg.mockLineUserId, null).then(unwrapEmployee);
+      // Serve the employee from local fixtures. This path used to call
+      // API.login(), which 404s whenever the FastAPI service is not deployed —
+      // that turned a UI review into an error screen. Real runs never take it.
+      var fixture = (global.__BENTO_MOCK__ || {}).employee;
+      if (!fixture) {
+        return Promise.reject(new Error('モックデータ（js/mock.js）が読み込まれていません。'));
+      }
+      global.__SESSION_TOKEN__ = 'mock-token';
+      return Promise.resolve(fixture);
     }
 
     // Embedded mode: the 申請フォーム tab embeds this app in an iframe and posts
@@ -263,6 +271,15 @@
 
   function loadMyOrders() {
     var dates = currentRangeDates();
+    if (cfg.isMockMode) {
+      // Fixtures stand in for the API so the UI is reviewable without it.
+      var mock = global.__BENTO_MOCK__ || {};
+      STATE.orders = {};
+      (mock.orders || []).forEach(function (o) {
+        if (o && o.date) STATE.orders[o.date] = 'ordered';
+      });
+      return Promise.resolve();
+    }
     return withSession(API.getMyOrders)(dates[0], dates[dates.length - 1])
       .then(function (res) {
         STATE.orders = {};
