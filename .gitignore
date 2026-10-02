@@ -18,3 +18,5 @@ bento_backend/**/__pycache__/
 bento_backend/**/*.pyc
 bento_backend/data/
 bento_backend/.venv/
+# Contains a placeholder for the LINE Channel secret — keep it local.
+RENDER_ENV.txt
