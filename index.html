@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001j</title>
+  <title>申請フォーム - v20261001k</title>
   <script>window.__v="20261001j";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
@@ -317,6 +317,15 @@
     var bentoRetryTimer = null;
     var BENTO_MAX_RETRIES = 20;
     var bentoRetries = 0;
+    // Explain WHY LIFF is unusable, rather than always saying the same thing.
+    // initLiff() records the concrete failure; without this the user sees one
+    // generic message whether the cause is a wrong liff id, an SDK that never
+    // loaded, or a scope change that was never saved in the console.
+    function whyLiffUnavailable() {
+      if (window.__liffInitError) return window.__liffInitError;
+      if (typeof liff === 'undefined') return 'LINE LIFF SDK が読み込まれていません。';
+      return 'LINE の認証が完了しませんでした（liff.init が未解決または失敗）。';
+    }
     function scheduleBentoCredentials() {
       if (bentoRetryTimer) return;
       if (bentoRetries >= BENTO_MAX_RETRIES) {
@@ -328,7 +337,7 @@
           if (stuckFrame && stuckFrame.contentWindow) {
             stuckFrame.contentWindow.postMessage({
               type: 'bento-auth-error',
-              message: 'LINE の認証が完了しませんでした（liff.init が未解決または失敗）。'
+              message: whyLiffUnavailable()
             }, window.location.origin);
           }
         } catch (e) {
@@ -1478,9 +1487,14 @@ var __el = document.getElementById('adjust-aspect');
     // === INIT LIFF ===
     async function initLiff() {
       log('initLiff: START');
+      // Record why LIFF could not initialise. sendBentoCredentials() reads this
+      // back so the bento tab reports the real cause instead of the generic
+      // "liff.init 未解決または失敗", which tells nobody anything actionable.
+      window.__liffInitError = '';
       var timeoutPromise = new Promise(function(resolve) {
         setTimeout(function() {
           log('initLiff: liff.init TIMEOUT after 10s', true);
+          window.__liffInitError = 'liff.init が10秒以内に解決しませんでした（SDKの読込またはLIFF通信の問題）。';
           resolve('timeout');
         }, 10000);
       });
@@ -1498,6 +1512,7 @@ var __el = document.getElementById('adjust-aspect');
           sendBentoCredentials();
         }
       } catch (err) {
+        window.__liffInitError = (err && (err.message || err.code || err.name)) || String(err);
         log('initLiff: liff.init ERROR: ' + err.message, true);
       }
       log('initLiff: COMPLETE');
