@@ -18,8 +18,8 @@ services:
       fi
     # Runtime env vars — set in the Render dashboard, do NOT commit:
     #   BENTO_APP_ENV=prod
-    #   BENTO_LIFF_ID=2011376207-0e7oVWOT
-    #   BENTO_LIFF_APP_URL=https://liff.line.me/2011376207-0e7oVWOT
+    #   BENTO_LIFF_ID=2011376207-0e7oVVOT
+    #   BENTO_LIFF_APP_URL=https://liff.line.me/2011376207-0e7oVVOT
     #   BENTO_PUBLIC_API_BASE_URL=https://liff-drawing-search.onrender.com
     #   BENTO_CORS_ORIGINS=https://liff-drawing-search.onrender.com
     #   BENTO_DATABASE_PATH=/tmp/bento.db
