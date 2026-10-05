@@ -190,18 +190,35 @@ app.add_middleware(
 )
 
 # Static site last: index.html is the LIFF endpoint, bento/ holds the iframe app.
+#
+# Route order matters — FastAPI matches in registration order, so these mounts
+# are registered after /health, /schedules and /api/* and can only serve files
+# nothing above claimed.
+#
+# The root mount is what serves /sdk.js. Without it the app had explicit routes
+# for only / and /form.html, so the LIFF SDK request returned 404, `liff` stayed
+# undefined, liff.init threw "liff is not defined", and the form reported
+# "LINE認証が必要です" — a failure that had nothing to do with LINE auth.
+# Adding one explicit route per asset would only move the problem to the next
+# missing file, so serve the whole directory instead.
 if (BASE_DIR / "bento").is_dir():
     app.mount("/bento", StaticFiles(directory=str(BASE_DIR / "bento"), html=True), name="bento")
+
+_NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate"}
 
 
 @app.get("/")
 async def index() -> FileResponse:
-    return FileResponse(BASE_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+    return FileResponse(BASE_DIR / "index.html", headers=_NO_CACHE)
 
 
 @app.get("/form.html")
 async def form() -> FileResponse:
-    return FileResponse(BASE_DIR / "form.html", headers={"Cache-Control": "no-cache"})
+    return FileResponse(BASE_DIR / "form.html", headers=_NO_CACHE)
+
+
+# Catch-all. Registered last, after every explicit route and the /bento mount.
+app.mount("/", StaticFiles(directory=str(BASE_DIR), html=True), name="static")
 
 
 if __name__ == "__main__":  # pragma: no cover
