@@ -190,11 +190,26 @@ async def delete_schedule(schedule_id: str) -> JSONResponse:
 try:
     from app.api import admin, auth, orders  # type: ignore
     from app.api import config_api as _config_api  # type: ignore
+    from app.db import get_conn as _bento_get_conn, migrate as _bento_migrate  # type: ignore
 
     app.include_router(_config_api.router)
     app.include_router(auth.router)
     app.include_router(orders.router)
     app.include_router(admin.router)
+
+    # Run the migrations here, not just inside the bento FastAPI app's lifespan.
+    # This app only *includes* the bento routers, so that lifespan never runs and
+    # nothing ever created the tables — every /api/auth/login died with a bare
+    # "no such table: employees". Apply them once at import, before the server
+    # accepts a request. migrate() is idempotent via schema_migrations.
+    try:
+        _applied = _bento_migrate(_bento_get_conn())
+        logger.info("bento migrations applied: %s", _applied or "(already up to date)")
+    except Exception as mig_exc:  # noqa: BLE001
+        _bento_error = f"migration failed: {mig_exc.__class__.__name__}: {mig_exc}"
+        logger.error("bento migrations FAILED: %s", mig_exc)
+        raise
+
     _bento_loaded = True
 except Exception as exc:  # pragma: no cover - depends on deployment layout
     _bento_error = f"{exc.__class__.__name__}: {exc}"
