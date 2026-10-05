@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001p</title>
-  <script>window.__v="20261001p";</script>
+  <title>申請フォーム - v20261001q</title>
+  <script>window.__v="20261001q";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -327,7 +327,9 @@
       // fix rather than a longer wait — reporting both as one generic retry
       // sent us chasing cold starts when the scope was the real problem.
       diag('3. 認証情報', 'userId=' + payload.lineUserId +
-           ' / idToken=' + (payload.idToken ? 'あり' : 'なし'));
+           ' / idToken=' + (payload.idToken ? 'あり' : 'なし') +
+           ' / inClient=' + (typeof liff !== 'undefined' && liff.isInClient ? liff.isInClient() : '?') +
+           ' / loggedIn=' + (typeof liff !== 'undefined' && liff.isLoggedIn ? liff.isLoggedIn() : '?'));
       frame.contentWindow.postMessage(payload, window.location.origin);
       log('sendBentoCredentials: sent to bento iframe');
     }
