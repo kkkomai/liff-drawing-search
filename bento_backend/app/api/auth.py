@@ -7,6 +7,8 @@ POST /api/auth/login
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, Request
 
 from ..config import Settings, get_settings
@@ -20,20 +22,31 @@ from .deps import current_employee
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+logger = logging.getLogger("uvicorn.error")
+
 
 def _verify_line_identity(body: LoginRequest, settings: Settings) -> None:
     if settings.dev_auth_enabled and body.dev_token == settings.dev_auth_token:
         return  # explicit local/dev escape hatch, off unless configured
     if not body.id_token:
-        # Previously this bare message sent the user to debug the server. In
-        # practice an empty jwt means the LIFF client context was minted before
-        # the openid scope was saved in the LINE console, and the WebView keeps
-        # serving that cached context — so name the actual cause and the fix.
-        raise unauthorized(
-            "id_token がありません。LINE コンソールの LIFF 設定で Scope に openid が含まれているか確認し、"
-            "『更新』を押してから LINE アプリを完全に終了し、再度起動してください"
-            "（LIFF の認証コンテキストは起動時にキャッシュされます）。"
+        # Falling back to line_user_id alone is off by default: without the ID
+        # token the value is client-supplied, so accepting it would let anyone
+        # log in as any employee just by changing a string. Operators can opt in
+        # explicitly for deployments where the LIFF app cannot issue tokens (a
+        # LIFF app created without the openid scope never gets one).
+        if not settings.allow_login_without_id_token:
+            raise unauthorized(
+                "id_token がありません。LINE コンソールの LIFF 設定で Scope に openid が含まれているか確認し、"
+                "『更新』を押してから LINE アプリを完全に終了し、再度起動してください"
+                "（LIFF の認証コンテキストは起動時にキャッシュされます）。"
+                "IDトークンを必須としない運用にする場合は BENTO_ALLOW_LOGIN_WITHOUT_ID_TOKEN=true を設定してください。"
+            )
+        logger.warning(
+            "login accepted without an ID token for line_user_id=%s "
+            "because allow_login_without_id_token is enabled",
+            body.line_user_id,
         )
+        return
     if not settings.line_verification_enabled:
         raise ApiError(
             503,

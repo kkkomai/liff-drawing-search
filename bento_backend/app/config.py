@@ -10,11 +10,14 @@ holds dev credentials.
 """
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from typing import Annotated, List, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+logger = logging.getLogger("uvicorn.error")
 
 AppEnv = Literal["dev", "staging", "prod"]
 
@@ -70,6 +73,17 @@ class Settings(BaseSettings):
     # When set, POST /api/auth/login accepts {"line_user_id": ..., "dev_token": ...}
     # instead of a real LINE ID token. MUST be empty in production.
     dev_auth_token: str | None = Field(default=None)
+
+    # --- tokenless login ---------------------------------------------------
+    # A LIFF app created without the openid scope never receives an ID token, so
+    # the token cannot be verified. When this is true, /api/auth/login falls back
+    # to trusting the client-supplied line_user_id.
+    #
+    # SECURITY: this removes the only thing proving the LINE user behind that id.
+    # Anyone can POST any line_user_id and impersonate any employee on the master.
+    # Keep it off unless the deployment genuinely cannot issue tokens, and prefer
+    # creating a new LIFF app with openid instead — see the skill notes.
+    allow_login_without_id_token: bool = Field(default=False)
 
     # --- http --------------------------------------------------------------
     # Comma-separated or JSON list; NoDecode stops pydantic-settings from
@@ -164,14 +178,26 @@ def assert_production_ready(settings: Settings) -> list[str]:
         problems.append("BENTO_CORS_ORIGINS に '*' は本番で使えません（LIFFオリジンを列挙してください）")
     if problems:
         raise ProductionNotReady("本番設定が未完了です:\n- " + "\n- ".join(problems))
-    return [
+    notes = [
         "BENTO_APP_ENV=prod",
         "dev escape hatch が無効",
-        "LINE IDトークン検証が有効",
         "LIFFアプリURLが設定済み",
         "公開API URLが https",
         "CORS Origins が明示許可リスト",
     ]
+    if settings.allow_login_without_id_token:
+        # Not a startup problem — the deployment can legitimately run this way —
+        # but it removes the only proof of who the LINE user is, so make it
+        # visible in the startup log rather than leaving it as a silent
+        # downgrade of the auth path.
+        notes.append("注意: IDトークン検証が実質無効（line_user_id の信頼のみ）")
+        logger.warning(
+            "allow_login_without_id_token=true: line_user_id is trusted from the client "
+            "with no token verification, so any caller can impersonate any employee"
+        )
+    else:
+        notes.append("LINE IDトークン検証が有効")
+    return notes
 
 
 @lru_cache
