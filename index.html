@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001o</title>
-  <script>window.__v="20261001o";</script>
+  <title>申請フォーム - v20261001p</title>
+  <script>window.__v="20261001p";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -298,7 +298,21 @@
         var decoded = liff.getDecodedIDToken();
         payload.idToken = decoded && decoded.jwt ? decoded.jwt : null;
       } catch (e) {
+        // Swallowing this used to hide the real reason. getDecodedIDToken()
+        // throws when the openid scope is missing or was never saved in the
+        // LIFF console, and that message is the only actionable clue — the
+        // backend then rejects login with "id_token がありません", which points
+        // at the server when the fault is a console setting.
         payload.idToken = null;
+        window.__idTokenError = (e && (e.message || e.code || e.name)) || String(e);
+        diag('4. IDトークン', '取得失敗: ' + window.__idTokenError);
+        log('sendBentoCredentials: getDecodedIDToken failed: ' + window.__idTokenError, true);
+      }
+      // A decoded token with an empty jwt means the same thing as a throw, and
+      // it would otherwise be reported as merely "idToken=なし".
+      if (!payload.idToken && !window.__idTokenError) {
+        window.__idTokenError = 'getDecodedIDToken() は成功しましたが jwt が空でした。';
+        diag('4. IDトークン', window.__idTokenError);
       }
       if (!payload.lineUserId) {
         // liff.init has not finished yet. The iframe asked before the SDK was
