@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001t</title>
-  <script>window.__v="20261001t";</script>
+  <title>申請フォーム - v20261001u</title>
+  <script>window.__v="20261001u";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -346,6 +346,21 @@
              ' / jwt=' + ((_full && _full.jwt) ? String(_full.jwt).length + '文字' : '空'));
       } catch (e2) {
         diag('3b. 復号結果', '例外: ' + (e2 && e2.message ? e2.message : e2));
+      }
+      // liff.idToken() is the documented accessor for the raw, signed token.
+      // getDecodedIDToken() returned raw claims with no `jwt`, which is the
+      // shape LIFF produces when openid was not granted — so ask the token
+      // endpoint directly and report aud/iss, which tell us whether the token
+      // was issued for THIS channel and issuer.
+      try {
+        var _raw = (typeof liff.idToken === 'function') ? liff.idToken() : null;
+        diag('3c. 生トークン', _raw ? String(_raw).length + '文字 / ' + String(_raw).slice(0, 24) + '...' : 'なし');
+        if (_raw) {
+          var _p = JSON.parse(atob(String(_raw).split('.')[1] || ''));
+          diag('3d. クレーム', 'aud=' + _p.aud + ' / iss=' + _p.iss + ' / nonce=' + (_p.nonce || '(なし)'));
+        }
+      } catch (e3) {
+        diag('3c. 生トークン', '例外: ' + (e3 && e3.message ? e3.message : e3));
       }
       frame.contentWindow.postMessage(payload, window.location.origin);
       log('sendBentoCredentials: sent to bento iframe');
