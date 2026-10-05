@@ -106,6 +106,28 @@ def _schedule_from_payload(data: dict) -> dict:
 @app.get("/health")
 def health() -> dict:
     payload = {"status": "ok", "port": PORT, "schedules": len(load_schedules())}
+    # Report whether the ordering DB is actually reachable. /api/auth/login
+    # returned a bare 500 with no body on Render while /health stayed green, so
+    # "the app is mounted" was indistinguishable from "the database works".
+    # Probe it here so one request tells us which half is broken.
+    try:
+        from app.db import get_conn  # type: ignore
+
+        _conn = get_conn()
+        _row = _conn.execute(
+            "SELECT COUNT(*) AS n FROM employees"
+        ).fetchone()
+        payload["db"] = {
+            "reachable": True,
+            "employees": _row["n"] if _row else 0,
+            "path": os.environ.get("BENTO_DATABASE_PATH", ""),
+        }
+    except Exception as exc:  # noqa: BLE001 - diagnostics must never raise
+        payload["db"] = {
+            "reachable": False,
+            "error": f"{exc.__class__.__name__}: {exc}",
+            "path": os.environ.get("BENTO_DATABASE_PATH", ""),
+        }
     # The bento settings object is optional here: the form site must stay usable
     # even when the ordering backend is not wired in. Report the mode when we
     # can read it and say so plainly when we cannot.
