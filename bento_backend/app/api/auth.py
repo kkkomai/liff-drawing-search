@@ -25,7 +25,15 @@ def _verify_line_identity(body: LoginRequest, settings: Settings) -> None:
     if settings.dev_auth_enabled and body.dev_token == settings.dev_auth_token:
         return  # explicit local/dev escape hatch, off unless configured
     if not body.id_token:
-        raise unauthorized("id_token がありません。")
+        # Previously this bare message sent the user to debug the server. In
+        # practice an empty jwt means the LIFF client context was minted before
+        # the openid scope was saved in the LINE console, and the WebView keeps
+        # serving that cached context — so name the actual cause and the fix.
+        raise unauthorized(
+            "id_token がありません。LINE コンソールの LIFF 設定で Scope に openid が含まれているか確認し、"
+            "『更新』を押してから LINE アプリを完全に終了し、再度起動してください"
+            "（LIFF の認証コンテキストは起動時にキャッシュされます）。"
+        )
     if not settings.line_verification_enabled:
         raise ApiError(
             503,
