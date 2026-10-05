@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001r</title>
-  <script>window.__v="20261001r";</script>
+  <title>申請フォーム - v20261001s</title>
+  <script>window.__v="20261001s";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -330,6 +330,23 @@
            ' / idToken=' + (payload.idToken ? 'あり' : 'なし') +
            ' / inClient=' + (typeof liff !== 'undefined' && liff.isInClient ? liff.isInClient() : '?') +
            ' / loggedIn=' + (typeof liff !== 'undefined' && liff.isLoggedIn ? liff.isLoggedIn() : '?'));
+      // Report WHICH LIFF app the SDK actually booted. If this differs from the
+      // id passed to liff.init, the scope being edited in the LINE console
+      // belongs to a different app — which looks exactly like "scope ignored"
+      // from inside the page, and cannot be told apart from a real scope bug.
+      try {
+        diag('3a. 実LIFF ID', liff.id || '(空)');
+      } catch (e) { /* older SDKs may not expose liff.id */ }
+      // The full decoded object, not just the jwt. A missing/empty jwt with
+      // everything else populated means "no openid in this context"; anything
+      // else means the SDK is in a state we have not accounted for.
+      try {
+        var _full = liff.getDecodedIDToken();
+        diag('3b. 復号結果', 'keys=' + Object.keys(_full || {}).join(',') +
+             ' / jwt=' + ((_full && _full.jwt) ? String(_full.jwt).length + '文字' : '空'));
+      } catch (e2) {
+        diag('3b. 復号結果', '例外: ' + (e2 && e2.message ? e2.message : e2));
+      }
       frame.contentWindow.postMessage(payload, window.location.origin);
       log('sendBentoCredentials: sent to bento iframe');
     }
