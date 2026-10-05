@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001m</title>
-  <script>window.__v="20261001m";</script>
+  <title>申請フォーム - v20261001n</title>
+  <script>window.__v="20261001n";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -303,10 +303,17 @@
       if (!payload.lineUserId) {
         // liff.init has not finished yet. The iframe asked before the SDK was
         // ready, so retry on a timer instead of dropping the request.
+        diag('3. 認証情報', 'userId 未取得（リトライ中）');
         log('sendBentoCredentials: LIFF not ready yet, retrying');
         scheduleBentoCredentials();
         return;
       }
+      // Distinguish "no userId" from "userId but no ID token". Only the latter
+      // means the openid scope is missing, and only that case needs a console
+      // fix rather than a longer wait — reporting both as one generic retry
+      // sent us chasing cold starts when the scope was the real problem.
+      diag('3. 認証情報', 'userId=' + payload.lineUserId +
+           ' / idToken=' + (payload.idToken ? 'あり' : 'なし'));
       frame.contentWindow.postMessage(payload, window.location.origin);
       log('sendBentoCredentials: sent to bento iframe');
     }
@@ -315,12 +322,10 @@
     // trying briefly. Bounded so a genuine auth failure still surfaces as an
     // error inside the iframe instead of an endless silent retry.
     var bentoRetryTimer = null;
-    // 300ms x 90 = 27s. The old budget was 20 (6s), which expires before a
-    // cold liff.init() in the LINE WebView has finished loading the SDK and
-    // the platform context — the iframe then showed "LINE認証が必要です" on a
-    // perfectly healthy app. Keep this comfortably above a slow init.
-    // 300ms x 200 = 60s, matching the initLiff budget above. Must outlast
-    // a cold Render boot, or the iframe errors out while LIFF is still starting.
+    // 300ms x 200 = 60s, matching the initLiff budget below. The original 20
+    // (6s) expired before a cold liff.init() finished loading the SDK, so the
+    // iframe showed "LINE認証が必要です" on a perfectly healthy app; 60s also
+    // outlasts a cold Render boot, which needs ~50s just to start.
     var BENTO_MAX_RETRIES = 200;
     var bentoRetries = 0;
     // Explain WHY LIFF is unusable, rather than always saying the same thing.
@@ -375,6 +380,26 @@
       if (logEl) {
         logEl.textContent = msg + '\n' + logEl.textContent;
       }
+      // Mirror the LIFF handshake steps onto a visible panel. Without this the
+      // only evidence of a failed handshake is a generic error inside the
+      // iframe, and the user cannot tell WHICH stage stalled.
+      if (window.__diagLines && isError) {
+        try {
+          var d = document.getElementById('diag-panel');
+          if (d) d.textContent = window.__diagLines.join('\n');
+        } catch (e) { /* diagnostics must never break the app */ }
+      }
+    }
+    // Compact, user-readable trace of the LIFF handshake, shown on failure.
+    function diag(step, detail) {
+      if (!window.__diagLines) window.__diagLines = [];
+      var line = step + (detail ? ': ' + detail : '');
+      if (window.__diagLines.indexOf(line) === -1) window.__diagLines.push(line);
+      if (window.__diagLines.length > 8) window.__diagLines.shift();
+      try {
+        var d = document.getElementById('diag-panel');
+        if (d) d.textContent = window.__diagLines.join('\n');
+      } catch (e) { /* ignore */ }
     }
     log('=== JS LOADED ===');
 
@@ -1493,6 +1518,7 @@ var __el = document.getElementById('adjust-aspect');
     // === INIT LIFF ===
     async function initLiff() {
       log('initLiff: START');
+      diag('1. SDK読込', typeof liff === 'undefined' ? 'liff が未定義' : 'OK');
       // Record why LIFF could not initialise. sendBentoCredentials() reads this
       // back so the bento tab reports the real cause instead of the generic
       // "liff.init 未解決または失敗", which tells nobody anything actionable.
@@ -1506,6 +1532,7 @@ var __el = document.getElementById('adjust-aspect');
           log('initLiff: liff.init TIMEOUT after 60s', true);
           window.__liffInitError =
             'liff.init が60秒以内に解決しませんでした（サーバーの再起動中かもしれません）。';
+          diag('2. liff.init', '60秒タイムアウト');
           resolve('timeout');
         }, 60000);
       });
@@ -1516,6 +1543,7 @@ var __el = document.getElementById('adjust-aspect');
           timeoutPromise
         ]);
         if (result !== 'timeout') {
+          diag('2. liff.init', '成功');
           log('initLiff: liff.init SUCCESS');
           // The bento tab may already be waiting on credentials; hand them over
           // now instead of making it poll.
@@ -1524,6 +1552,7 @@ var __el = document.getElementById('adjust-aspect');
         }
       } catch (err) {
         window.__liffInitError = (err && (err.message || err.code || err.name)) || String(err);
+        diag('2. liff.init', '失敗: ' + window.__liffInitError);
         log('initLiff: liff.init ERROR: ' + err.message, true);
       }
       log('initLiff: COMPLETE');
@@ -1621,6 +1650,20 @@ var __el = document.getElementById('adjust-aspect');
         });
         loadPaidHistories();
     });
+  </script>
+  <div id="diag-panel" style="position:fixed;left:0;right:0;bottom:0;z-index:9999;
+       background:#111;color:#0f0;font:10px/1.4 monospace;padding:6px 8px;
+       white-space:pre-wrap;max-height:22vh;overflow:auto;display:none"></div>
+  <script>
+    (function () {
+      var p = document.getElementById('diag-panel');
+      function show() { p.style.display = 'block'; }
+      // Only reveal when something actually failed, so the normal app stays clean.
+      var iv = setInterval(function () {
+        if (window.__diagLines && window.__diagLines.length) { show(); clearInterval(iv); }
+      }, 400);
+      setTimeout(function () { clearInterval(iv); }, 90000);
+    })();
   </script>
 </body>
 </html>
