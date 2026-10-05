@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001s</title>
-  <script>window.__v="20261001s";</script>
+  <title>申請フォーム - v20261001t</title>
+  <script>window.__v="20261001t";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1692,17 +1692,43 @@ liff.init({
     });
   </script>
   <div id="diag-panel" style="position:fixed;left:0;right:0;bottom:0;z-index:9999;
-       background:#111;color:#0f0;font:10px/1.4 monospace;padding:6px 8px;
-       white-space:pre-wrap;max-height:22vh;overflow:auto;display:none"></div>
+       background:#000;color:#0f0;font:13px/1.7 -apple-system,monospace;
+       padding:12px 14px;white-space:pre-wrap;max-height:46vh;overflow:auto;
+       display:none;border-top:3px solid #0f0;-webkit-user-select:all;user-select:all"></div>
+  <button id="diag-copy" style="position:fixed;right:10px;bottom:calc(46vh + 8px);z-index:10000;
+       display:none;background:#0f0;color:#000;border:0;border-radius:20px;
+       padding:9px 18px;font:bold 13px/1 -apple-system,sans-serif">診断をコピー</button>
   <script>
     (function () {
       var p = document.getElementById('diag-panel');
-      function show() { p.style.display = 'block'; }
+      var btn = document.getElementById('diag-copy');
+      function show() {
+        p.style.display = 'block';
+        btn.style.display = 'block';
+        btn.style.bottom = (p.getBoundingClientRect().height + 8) + 'px';
+      }
       // Only reveal when something actually failed, so the normal app stays clean.
       var iv = setInterval(function () {
         if (window.__diagLines && window.__diagLines.length) { show(); clearInterval(iv); }
       }, 400);
-      setTimeout(function () { clearInterval(iv); }, 90000);
+      setTimeout(function () { clearInterval(iv); }, 120000);
+      btn.addEventListener('click', function () {
+        var text = window.__diagLines.join('\n');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () {
+            btn.textContent = 'コピーしました';
+            setTimeout(function () { btn.textContent = '診断をコピー'; }, 2000);
+          }, function () { selectFallback(); });
+        } else { selectFallback(); }
+      });
+      function selectFallback() {
+        var r = document.createRange();
+        r.selectNodeContents(p);
+        var sel = getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+        btn.textContent = 'テキストを選択しました';
+      }
     })();
   </script>
 </body>
