@@ -210,6 +210,30 @@ try:
         logger.error("bento migrations FAILED: %s", mig_exc)
         raise
 
+    # The /tmp/bento.db is ephemeral on Render's free tier, so seed once.
+    try:
+        from app.db import get_conn  # type: ignore
+
+        _seed_conn = get_conn()
+        _count = _seed_conn.execute("SELECT COUNT(*) AS n FROM employees").fetchone()
+        if _count and _count["n"] == 0:
+            seed_path = Path(__file__).parent / "bento_backend" / "app" / "seed_employee.sql"
+            if seed_path.exists():
+                _seed_conn.executescript(seed_path.read_text(encoding="utf-8"))
+                logger.info("seeded employee from %s", seed_path)
+            else:
+                now_str = datetime.now(JST).strftime("%Y-%m-%dT%H:%M:%S+0900")
+                _seed_conn.execute(
+                    "INSERT OR IGNORE INTO employees "
+                    "(id, employee_code, name, role, is_active, line_user_id, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (1, "E001", "岩野", "employee", 1,
+                     "U4786cd63cad2f9cf56f6c01494d5cb0e", now_str),
+                )
+                logger.info("seeded employee (direct insert) for line_user_id=U4786cd63...")
+    except Exception as seed_exc:  # diagnostics: never fatal
+        logger.warning("employee seed failed (not fatal): %s", seed_exc)
+
     _bento_loaded = True
 except Exception as exc:  # pragma: no cover - depends on deployment layout
     _bento_error = f"{exc.__class__.__name__}: {exc}"
