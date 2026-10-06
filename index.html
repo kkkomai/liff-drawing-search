@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001x</title>
+  <title>申請フォーム - v20261001y</title>
   <script>window.__v="20261001x";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
@@ -305,19 +305,16 @@
         // at the server when the fault is a console setting.
         payload.idToken = null;
         window.__idTokenError = (e && (e.message || e.code || e.name)) || String(e);
-        diag('4. IDトークン', '取得失敗: ' + window.__idTokenError);
         log('sendBentoCredentials: getDecodedIDToken failed: ' + window.__idTokenError, true);
       }
       // A decoded token with an empty jwt means the same thing as a throw, and
       // it would otherwise be reported as merely "idToken=なし".
       if (!payload.idToken && !window.__idTokenError) {
         window.__idTokenError = 'getDecodedIDToken() は成功しましたが jwt が空でした。';
-        diag('4. IDトークン', window.__idTokenError);
       }
       if (!payload.lineUserId) {
         // liff.init has not finished yet. The iframe asked before the SDK was
         // ready, so retry on a timer instead of dropping the request.
-        diag('3. 認証情報', 'userId 未取得（リトライ中）');
         log('sendBentoCredentials: LIFF not ready yet, retrying');
         scheduleBentoCredentials();
         return;
@@ -326,7 +323,6 @@
       // means the openid scope is missing, and only that case needs a console
       // fix rather than a longer wait — reporting both as one generic retry
       // sent us chasing cold starts when the scope was the real problem.
-      diag('3. 認証情報', 'userId=' + payload.lineUserId +
            ' / idToken=' + (payload.idToken ? 'あり' : 'なし') +
            ' / inClient=' + (typeof liff !== 'undefined' && liff.isInClient ? liff.isInClient() : '?') +
            ' / loggedIn=' + (typeof liff !== 'undefined' && liff.isLoggedIn ? liff.isLoggedIn() : '?'));
@@ -335,17 +331,14 @@
       // belongs to a different app — which looks exactly like "scope ignored"
       // from inside the page, and cannot be told apart from a real scope bug.
       try {
-        diag('3a. 実LIFF ID', liff.id || '(空)');
       } catch (e) { /* older SDKs may not expose liff.id */ }
       // The full decoded object, not just the jwt. A missing/empty jwt with
       // everything else populated means "no openid in this context"; anything
       // else means the SDK is in a state we have not accounted for.
       try {
         var _full = liff.getDecodedIDToken();
-        diag('3b. 復号結果', 'keys=' + Object.keys(_full || {}).join(',') +
              ' / jwt=' + ((_full && _full.jwt) ? String(_full.jwt).length + '文字' : '空'));
       } catch (e2) {
-        diag('3b. 復号結果', '例外: ' + (e2 && e2.message ? e2.message : e2));
       }
       // liff.idToken() is the documented accessor for the raw, signed token.
       // getDecodedIDToken() returned raw claims with no `jwt`, which is the
@@ -354,13 +347,10 @@
       // was issued for THIS channel and issuer.
       try {
         var _raw = (typeof liff.idToken === 'function') ? liff.idToken() : null;
-        diag('3c. 生トークン', _raw ? String(_raw).length + '文字 / ' + String(_raw).slice(0, 24) + '...' : 'なし');
         if (_raw) {
           var _p = JSON.parse(atob(String(_raw).split('.')[1] || ''));
-          diag('3d. クレーム', 'aud=' + _p.aud + ' / iss=' + _p.iss + ' / nonce=' + (_p.nonce || '(なし)'));
         }
       } catch (e3) {
-        diag('3c. 生トークン', '例外: ' + (e3 && e3.message ? e3.message : e3));
       }
       frame.contentWindow.postMessage(payload, window.location.origin);
       log('sendBentoCredentials: sent to bento iframe');
@@ -381,7 +371,6 @@
     // generic message whether the cause is a wrong liff id, an SDK that never
     // loaded, or a scope change that was never saved in the console.
     function whyLiffUnavailable() {
-      if (window.__liffInitError) return window.__liffInitError;
       if (typeof liff === 'undefined') return 'LINE LIFF SDK が読み込まれていません。';
       return 'LINE の認証が完了しませんでした（liff.init が未解決または失敗）。';
     }
@@ -431,24 +420,10 @@
       // Mirror the LIFF handshake steps onto a visible panel. Without this the
       // only evidence of a failed handshake is a generic error inside the
       // iframe, and the user cannot tell WHICH stage stalled.
-      if (window.__diagLines && isError) {
         try {
-          var d = document.getElementById('diag-panel');
-          if (d) d.textContent = window.__diagLines.join('\n');
-        } catch (e) { /* diagnostics must never break the app */ }
       }
     }
-    // Compact, user-readable trace of the LIFF handshake, shown on failure.
-    function diag(step, detail) {
-      if (!window.__diagLines) window.__diagLines = [];
-      var line = step + (detail ? ': ' + detail : '');
-      if (window.__diagLines.indexOf(line) === -1) window.__diagLines.push(line);
-      if (window.__diagLines.length > 8) window.__diagLines.shift();
-      try {
-        var d = document.getElementById('diag-panel');
-        if (d) d.textContent = window.__diagLines.join('\n');
-      } catch (e) { /* ignore */ }
-    }
+    // Diagnostics removed (v20261001y).
     log('=== JS LOADED ===');
 
     // === ELEMENTS ===
@@ -1566,11 +1541,9 @@ var __el = document.getElementById('adjust-aspect');
     // === INIT LIFF ===
     async function initLiff() {
       log('initLiff: START');
-      diag('1. SDK読込', typeof liff === 'undefined' ? 'liff が未定義' : 'OK');
       // Record why LIFF could not initialise. sendBentoCredentials() reads this
       // back so the bento tab reports the real cause instead of the generic
       // "liff.init 未解決または失敗", which tells nobody anything actionable.
-      window.__liffInitError = '';
       var timeoutPromise = new Promise(function(resolve) {
         setTimeout(function() {
           // 60s, not 10s. A Render free instance sleeps after ~15 min idle and
@@ -1578,9 +1551,7 @@ var __el = document.getElementById('adjust-aspect');
           // the SDK, index.html and the LIFF handshake can all still be in
           // flight when a 10s budget expires — on a completely healthy app.
           log('initLiff: liff.init TIMEOUT after 60s', true);
-          window.__liffInitError =
             'liff.init が60秒以内に解決しませんでした（サーバーの再起動中かもしれません）。';
-          diag('2. liff.init', '60秒タイムアウト');
           resolve('timeout');
         }, 60000);
       });
@@ -1598,7 +1569,6 @@ liff.init({
           timeoutPromise
         ]);
         if (result !== 'timeout') {
-          diag('2. liff.init', '成功');
           log('initLiff: liff.init SUCCESS');
           // The bento tab may already be waiting on credentials; hand them over
           // now instead of making it poll.
@@ -1606,8 +1576,6 @@ liff.init({
           sendBentoCredentials();
         }
       } catch (err) {
-        window.__liffInitError = (err && (err.message || err.code || err.name)) || String(err);
-        diag('2. liff.init', '失敗: ' + window.__liffInitError);
         log('initLiff: liff.init ERROR: ' + err.message, true);
       }
       log('initLiff: COMPLETE');
@@ -1706,45 +1674,6 @@ liff.init({
         loadPaidHistories();
     });
   </script>
-  <div id="diag-panel" style="position:fixed;left:0;right:0;bottom:0;z-index:9999;
-       background:#000;color:#0f0;font:13px/1.7 -apple-system,monospace;
-       padding:12px 14px;white-space:pre-wrap;max-height:46vh;overflow:auto;
-       display:none;border-top:3px solid #0f0;-webkit-user-select:all;user-select:all"></div>
-  <button id="diag-copy" style="position:fixed;right:10px;bottom:calc(46vh + 8px);z-index:10000;
-       display:none;background:#0f0;color:#000;border:0;border-radius:20px;
-       padding:9px 18px;font:bold 13px/1 -apple-system,sans-serif">診断をコピー</button>
-  <script>
-    (function () {
-      var p = document.getElementById('diag-panel');
-      var btn = document.getElementById('diag-copy');
-      function show() {
-        p.style.display = 'block';
-        btn.style.display = 'block';
-        btn.style.bottom = (p.getBoundingClientRect().height + 8) + 'px';
-      }
-      // Only reveal when something actually failed, so the normal app stays clean.
-      var iv = setInterval(function () {
-        if (window.__diagLines && window.__diagLines.length) { show(); clearInterval(iv); }
-      }, 400);
-      setTimeout(function () { clearInterval(iv); }, 120000);
-      btn.addEventListener('click', function () {
-        var text = window.__diagLines.join('\n');
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text).then(function () {
-            btn.textContent = 'コピーしました';
-            setTimeout(function () { btn.textContent = '診断をコピー'; }, 2000);
-          }, function () { selectFallback(); });
-        } else { selectFallback(); }
-      });
-      function selectFallback() {
-        var r = document.createRange();
-        r.selectNodeContents(p);
-        var sel = getSelection();
-        sel.removeAllRanges();
-        sel.addRange(r);
-        btn.textContent = 'テキストを選択しました';
-      }
-    })();
-  </script>
+  
 </body>
 </html>
