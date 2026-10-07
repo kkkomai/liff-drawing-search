@@ -39,7 +39,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -231,7 +231,7 @@ def get_schedules() -> dict:
 
 @app.post("/schedules")
 @app.post("/create")
-async def create_schedule(payload: dict) -> JSONResponse:
+async def create_schedule(payload: dict = Body(...)) -> JSONResponse:
     new = _schedule_from_payload(payload)
     if USE_POSTGRES:
         _upsert_schedule(new)
@@ -243,7 +243,7 @@ async def create_schedule(payload: dict) -> JSONResponse:
 
 
 @app.put("/schedules/{schedule_id}")
-async def update_schedule(schedule_id: str, payload: dict) -> JSONResponse:
+async def update_schedule(schedule_id: str, payload: dict = Body(...)) -> JSONResponse:
     updated = _update_schedule(schedule_id, payload)
     if not updated:
         return JSONResponse(status_code=404, content={"success": False, "error": "not found"})
