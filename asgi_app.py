@@ -71,21 +71,101 @@ _bento_loaded = False
 _bento_error = ""
 
 # --------------------------------------------------------------------------- #
-# schedules.json storage (behaviour preserved from search_server.py)
+# schedules storage — Postgres when DATABASE_URL is set, else schedules.json.
 # --------------------------------------------------------------------------- #
 
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+USE_POSTGRES = bool(DATABASE_URL)
 
-def load_schedules() -> list[dict]:
+if USE_POSTGRES:
     try:
-        with SCHEDULES_FILE.open("r", encoding="utf-8") as fh:
-            return json.load(fh)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []
+        import psycopg  # type: ignore
+    except Exception as _pg_exc:  # noqa: BLE001
+        logger.error("DATABASE_URL is set but psycopg is not installed: %s", _pg_exc)
+        raise
+    from schedules_db import (  # type: ignore
+        list_schedules as _pg_list,
+        insert_schedule as _pg_insert,
+        update_schedule as _pg_update,
+        delete_schedule as _pg_delete,
+    )
 
+    def load_schedules() -> list[dict]:
+        return _pg_list()
 
-def save_schedules(rows: list[dict]) -> None:
-    with SCHEDULES_FILE.open("w", encoding="utf-8") as fh:
-        json.dump(rows, fh, ensure_ascii=False, indent=2)
+    def save_schedules(rows: list[dict]) -> None:  # noqa: D401 - legacy shim
+        # Bulk replace: delete everything then re-insert. Cheap on this table
+        # size and avoids diverging from the JSON-file semantics (full snapshot).
+        try:
+            with psycopg.connect(DATABASE_URL, autocommit=True) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM schedules")
+                    for row in rows:
+                        cur.execute(
+                            "INSERT INTO schedules (id, title, date, time, description, created) "
+                            "VALUES (%s, %s, %s, %s, %s, %s)",
+                            (
+                                row.get("id"),
+                                row.get("title"),
+                                row.get("date"),
+                                row.get("time", ""),
+                                row.get("description", ""),
+                                row.get("created", ""),
+                            ),
+                        )
+        except Exception as exc:
+            logger.error("save_schedules (pg) failed: %s", exc)
+            raise
+
+    def _upsert_schedule(schedule: dict) -> None:
+        _pg_insert(schedule)
+
+    def _update_schedule(schedule_id: str, updates: dict) -> dict | None:
+        return _pg_update(schedule_id, updates)
+
+    def _delete_schedule(schedule_id: str) -> bool:
+        return _pg_delete(schedule_id)
+
+    logger.info("Schedules store: Postgres (%s...)", DATABASE_URL[:32])
+else:
+    def load_schedules() -> list[dict]:
+        try:
+            with SCHEDULES_FILE.open("r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
+
+    def save_schedules(rows: list[dict]) -> None:
+        with SCHEDULES_FILE.open("w", encoding="utf-8") as fh:
+            json.dump(rows, fh, ensure_ascii=False, indent=2)
+
+    def _upsert_schedule(schedule: dict) -> None:
+        rows = load_schedules()
+        rows.append(schedule)
+        save_schedules(rows)
+
+    def _update_schedule(schedule_id: str, updates: dict) -> dict | None:
+        rows = load_schedules()
+        for idx, row in enumerate(rows):
+            if row.get("id") == schedule_id:
+                updated = dict(row)
+                for key in ("title", "date", "time", "description"):
+                    if key in updates:
+                        updated[key] = str(updates[key]).strip()
+                rows[idx] = updated
+                save_schedules(rows)
+                return updated
+        return None
+
+    def _delete_schedule(schedule_id: str) -> bool:
+        rows = load_schedules()
+        kept = [r for r in rows if r.get("id") != schedule_id]
+        if len(kept) == len(rows):
+            return False
+        save_schedules(kept)
+        return True
+
+    logger.info("Schedules store: JSON file (%s)", SCHEDULES_FILE)
 
 
 def _schedule_from_payload(data: dict) -> dict:
@@ -105,7 +185,8 @@ def _schedule_from_payload(data: dict) -> dict:
 
 @app.get("/health")
 def health() -> dict:
-    payload = {"status": "ok", "port": PORT, "schedules": len(load_schedules())}
+    payload = {"status": "ok", "port": PORT, "schedules": len(load_schedules()),
+               "schedules_store": "postgres" if USE_POSTGRES else "json"}
     # Report whether the ordering DB is actually reachable. /api/auth/login
     # returned a bare 500 with no body on Render while /health stayed green, so
     # "the app is mounted" was indistinguishable from "the database works".
@@ -152,35 +233,28 @@ def get_schedules() -> dict:
 @app.post("/create")
 async def create_schedule(payload: dict) -> JSONResponse:
     new = _schedule_from_payload(payload)
-    rows = load_schedules()
-    rows.append(new)
-    save_schedules(rows)
+    if USE_POSTGRES:
+        _upsert_schedule(new)
+    else:
+        rows = load_schedules()
+        rows.append(new)
+        save_schedules(rows)
     return JSONResponse(status_code=201, content={"success": True, "schedule": new})
 
 
 @app.put("/schedules/{schedule_id}")
 async def update_schedule(schedule_id: str, payload: dict) -> JSONResponse:
-    rows = load_schedules()
-    for idx, row in enumerate(rows):
-        if row.get("id") == schedule_id:
-            updated = dict(row)
-            for key in ("title", "date", "time", "description"):
-                if key in payload:
-                    updated[key] = str(payload[key]).strip()
-            rows[idx] = updated
-            save_schedules(rows)
-            return JSONResponse(content={"success": True, "schedule": updated})
-    return JSONResponse(status_code=404, content={"success": False, "error": "not found"})
+    updated = _update_schedule(schedule_id, payload)
+    if not updated:
+        return JSONResponse(status_code=404, content={"success": False, "error": "not found"})
+    return JSONResponse(content={"success": True, "schedule": updated})
 
 
 @app.delete("/schedules/{schedule_id}")
 async def delete_schedule(schedule_id: str) -> JSONResponse:
-    rows = load_schedules()
-    kept = [r for r in rows if r.get("id") != schedule_id]
-    if len(kept) == len(rows):
-        return JSONResponse(status_code=404, content={"success": False, "error": "not found"})
-    save_schedules(kept)
-    return JSONResponse(content={"success": True, "message": "Schedule deleted"})
+    if _delete_schedule(schedule_id):
+        return JSONResponse(content={"success": True, "message": "Schedule deleted"})
+    return JSONResponse(status_code=404, content={"success": False, "error": "not found"})
 
 
 # --------------------------------------------------------------------------- #
