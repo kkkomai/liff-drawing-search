@@ -13,6 +13,100 @@ PORT = int(os.environ.get("PORT", "10000"))
 BASE_DIR = Path(__file__).parent.resolve()
 SCHEDULES_FILE = BASE_DIR / "schedules.json"
 
+# When DATABASE_URL is set, schedules live in Postgres instead of schedules.json.
+# Render's free tier has ephemeral disk; without this, all entries vanish
+# after the 15-minute cold-start. The JSON-file path remains the local-dev
+# default and the fallback when DATABASE_URL is absent.
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+USE_POSTGRES = bool(DATABASE_URL)
+
+if USE_POSTGRES:
+    try:
+        import psycopg  # type: ignore  # noqa: F401
+    except Exception as _pg_exc:  # noqa: BLE001
+        logger.error("DATABASE_URL is set but psycopg is not installed: %s", _pg_exc)
+        raise
+    from schedules_db import (  # type: ignore
+        list_schedules as _pg_list,
+        insert_schedule as _pg_insert,
+        update_schedule as _pg_update,
+        delete_schedule as _pg_delete,
+    )
+
+    def load_schedules():
+        return _pg_list()
+
+    def save_schedules(schedules):
+        with psycopg.connect(DATABASE_URL, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM schedules")
+                for s in schedules:
+                    cur.execute(
+                        "INSERT INTO schedules (id, title, date, time, description, created) "
+                        "VALUES (%s, %s, %s, %s, %s, %s)",
+                        (
+                            s.get("id"),
+                            s.get("title"),
+                            s.get("date"),
+                            s.get("time", ""),
+                            s.get("description", ""),
+                            s.get("created", ""),
+                        ),
+                    )
+
+    def _delete_schedule_by_id(sid: str) -> bool:
+        return _pg_delete(sid)
+
+    def _update_schedule(sid: str, updates: dict):
+        return _pg_update(sid, updates)
+
+    def _append_schedule(schedule: dict) -> None:
+        _pg_insert(schedule)
+
+    logger.info("Schedules store: Postgres (%s...)", DATABASE_URL[:32])
+else:
+    def load_schedules():
+        try:
+            with open(SCHEDULES_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
+
+
+    def save_schedules(schedules):
+        with open(SCHEDULES_FILE, "w", encoding="utf-8") as f:
+            json.dump(schedules, f, ensure_ascii=False, indent=2)
+
+
+    def _delete_schedule_by_id(sid: str) -> bool:
+        schedules = load_schedules()
+        new = [s for s in schedules if s.get("id") != sid]
+        if len(new) == len(schedules):
+            return False
+        save_schedules(new)
+        return True
+
+
+    def _update_schedule(sid: str, updates: dict):
+        schedules = load_schedules()
+        for s in schedules:
+            if s.get("id") == sid:
+                for key in ("title", "date", "time", "description"):
+                    if key in updates:
+                        s[key] = str(updates[key]).strip()
+                save_schedules(schedules)
+                return s
+        return None
+
+
+    def _append_schedule(schedule: dict) -> None:
+        schedules = load_schedules()
+        schedules.append(schedule)
+        save_schedules(schedules)
+
+
+    logger.info("Schedules store: JSON file (%s)", SCHEDULES_FILE)
+
 # The bento ordering app is developed in projects/bento-liff/frontend and embedded
 # here as a tab. On Render only this repo is deployed, so the files are copied into
 # bento/ at build time; locally we serve them straight from the project so there is
@@ -96,13 +190,10 @@ class Handler(SimpleHTTPRequestHandler):
     def do_DELETE(self):
         if self.path.startswith("/schedules/"):
             sid = self.path.split("/")[-1]
-            schedules = load_schedules()
-            new = [s for s in schedules if s.get("id") != sid]
-            if len(new) < len(schedules):
-                save_schedules(new)
+            if _delete_schedule_by_id(sid):
                 self.send_json(200, {"success": True, "message": "Schedule deleted"})
-                return
-            self.send_json(404, {"error": "Schedule not found"})
+            else:
+                self.send_json(404, {"error": "Schedule not found"})
             return
         self.send_json(404, {"error": "not found"})
 
@@ -116,17 +207,11 @@ class Handler(SimpleHTTPRequestHandler):
             except json.JSONDecodeError:
                 self.send_json(400, {"error": "invalid JSON"})
                 return
-            schedules = load_schedules()
-            for s in schedules:
-                if s.get("id") == sid:
-                    s["title"] = data.get("title", s["title"]).strip()
-                    s["date"] = data.get("date", s["date"]).strip()
-                    s["time"] = data.get("time", s["time"]).strip()
-                    s["description"] = data.get("description", s["description"]).strip()
-                    save_schedules(schedules)
-                    self.send_json(200, {"success": True, "schedule": s})
-                    return
-            self.send_json(404, {"error": "Schedule not found"})
+            updated = _update_schedule(sid, data)
+            if updated is not None:
+                self.send_json(200, {"success": True, "schedule": updated})
+            else:
+                self.send_json(404, {"error": "Schedule not found"})
             return
         self.send_json(404, {"error": "not found"})
 
@@ -152,10 +237,8 @@ class Handler(SimpleHTTPRequestHandler):
                 if not title or not date:
                     self.send_json(400, {"error": "title and date are required"})
                     return
-                schedules = load_schedules()
                 new = {"id": str(uuid.uuid4()), "title": title, "date": date, "time": data.get("time", "").strip(), "description": data.get("description", "").strip(), "created": datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%dT%H:%M:%S+0900")}
-                schedules.append(new)
-                save_schedules(schedules)
+                _append_schedule(new)
                 self.send_json(201, {"success": True, "schedule": new})
             except Exception as exc:
                 logger.error("POST /create error: %s", exc)
