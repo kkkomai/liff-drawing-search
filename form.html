@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001final</title>
-  <script>window.__v="20261001w";</script>
+  <title>申請フォーム - v20261007retry</title>
+  <script>window.__v="20261007r";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span id="appVersion" style="font-size:11px;color:#999;">(v20261001final)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span id="appVersion" style="font-size:11px;color:#999;">(v20261007retry)</span></h1>
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -943,24 +943,34 @@
         renderOvertimeCalendar();
     }
 
-    function loadSchedules(callback) {
-        log('Loading schedules...');
-        fetch("/schedules")
+    function loadSchedules(callback, attempt) {
+        attempt = attempt || 0;
+        var maxAttempts = 4;
+        log('Loading schedules... (attempt ' + (attempt + 1) + ')');
+        fetch("/schedules", { cache: "no-store" })
             .then(function(resp) { return resp.json(); })
             .then(function(data) {
                 if (data && Array.isArray(data.schedules)) {
                     allSchedules = data.schedules;
                     log('Schedules loaded: ' + allSchedules.length);
+                    if (callback) callback();
                 } else {
-                    allSchedules = [];
-                    log('No schedules found');
+                    throw new Error('invalid response shape');
                 }
-                if (callback) callback();
             })
             .catch(function(err) {
-                log('Load schedules error: ' + err.message, true);
-                allSchedules = [];
-                if (callback) callback();
+                // Render free tier sleeps the service after 15 min of idle; the
+                // first request after wakeup is slow and often fails. Retry with
+                // exponential backoff so the user does not see an empty list.
+                if (attempt < maxAttempts - 1) {
+                    var delay = 1000 * Math.pow(2, attempt);
+                    log('Load schedules retry in ' + delay + 'ms: ' + err.message);
+                    setTimeout(function() { loadSchedules(callback, attempt + 1); }, delay);
+                } else {
+                    log('Load schedules error after ' + maxAttempts + ' attempts: ' + err.message, true);
+                    allSchedules = [];
+                    if (callback) callback();
+                }
             });
     }
 
