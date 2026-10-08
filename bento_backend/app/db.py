@@ -71,15 +71,30 @@ def _connect_postgres(url: str):
 
 
 def get_conn():
-    """Per-thread connection (SQLite or Postgres) chosen from the environment."""
+    """Per-thread connection (SQLite or Postgres) chosen from the environment.
+
+    Recovers from a closed Postgres connection: psycopg pools do not
+    auto-reconnect, so a long-running server thread that survived a
+    Render sleep cycle will be holding a dead socket. The `closed` /
+    `broken` attributes are checked on every call and the connection is
+    replaced transparently.
+    """
     conn = getattr(_local, "conn", None)
     key = getattr(_local, "db_key", None)
     settings = get_settings()
     if _is_postgres():
         url = os.environ.get("DATABASE_URL", "").strip() or settings.database_url
-        if conn is None or key != ("pg", url):
-            if conn is not None:
-                conn.close()
+        if (
+            conn is None
+            or key != ("pg", url)
+            or getattr(conn, "closed", False)
+            or getattr(conn, "broken", False)
+        ):
+            if conn is not None and not getattr(conn, "closed", False):
+                try:
+                    conn.close()
+                except Exception:
+                    pass
             conn = _connect_postgres(url)
             _local.conn = conn
             _local.db_key = ("pg", url)
@@ -88,7 +103,10 @@ def get_conn():
         path = settings.database_path
         if conn is None or key != ("sqlite", path):
             if conn is not None:
-                conn.close()
+                try:
+                    conn.close()
+                except Exception:
+                    pass
             conn = _connect_sqlite(path)
             _local.conn = conn
             _local.db_key = ("sqlite", path)
