@@ -296,25 +296,57 @@ try:
         raise
 
     # The /tmp/bento.db is ephemeral on Render's free tier, so seed once.
+    # Postgres is permanent, so this becomes a no-op once the row exists.
     try:
-        from app.db import get_conn  # type: ignore
+        from app.db import bind, get_conn, kind  # type: ignore
 
         _seed_conn = get_conn()
-        _count = _seed_conn.execute("SELECT COUNT(*) AS n FROM employees").fetchone()
+        _count = _seed_conn.execute(bind("SELECT COUNT(*) AS n FROM employees")).fetchone()
         if _count and _count["n"] == 0:
             seed_path = Path(__file__).parent / "bento_backend" / "app" / "seed_employee.sql"
             if seed_path.exists():
-                _seed_conn.executescript(seed_path.read_text(encoding="utf-8"))
-                logger.info("seeded employee from %s", seed_path)
+                # executescript() is SQLite-only; psycopg connections have no
+                # such method. Execute each statement individually instead, and
+                # use the bind() translator so SQLite's `INSERT OR IGNORE`
+                # becomes a portable `ON CONFLICT DO NOTHING` for Postgres.
+                sql_text = seed_path.read_text(encoding="utf-8")
+                is_pg = kind() == "pg"
+                for raw in [s.strip() for s in sql_text.split(";") if s.strip()]:
+                    if is_pg:
+                        # SQLite: INSERT OR IGNORE INTO t ... -> Postgres: INSERT INTO t ... ON CONFLICT (id) DO NOTHING
+                        translated = raw.replace(
+                            "INSERT OR IGNORE INTO",
+                            "INSERT INTO",
+                        )
+                        # Add ON CONFLICT (id) DO NOTHING for the employees table
+                        if "employees" in translated and "ON CONFLICT" not in translated:
+                            translated = translated.rstrip() + " ON CONFLICT (id) DO NOTHING"
+                    else:
+                        translated = raw
+                    _seed_conn.execute(translated)
+                logger.info("seeded employee from %s (backend=%s)", seed_path, kind())
             else:
                 now_str = datetime.now(JST).strftime("%Y-%m-%dT%H:%M:%S+0900")
-                _seed_conn.execute(
-                    "INSERT OR IGNORE INTO employees "
-                    "(id, employee_code, name, role, is_active, line_user_id, created_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (1, "E001", "岩野", "employee", 1,
-                     "U4786cd63cad2f9cf56f6c01494d5cb0e", now_str),
-                )
+                if kind() == "pg":
+                    _seed_conn.execute(
+                        bind(
+                            "INSERT INTO employees "
+                            "(id, employee_code, name, role, is_active, line_user_id, created_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING"
+                        ),
+                        (1, "E001", "岩野", "employee", 1,
+                         "U4786cd63cad2f9cf56f6c01494d5cb0e", now_str),
+                    )
+                else:
+                    _seed_conn.execute(
+                        bind(
+                            "INSERT OR IGNORE INTO employees "
+                            "(id, employee_code, name, role, is_active, line_user_id, created_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)"
+                        ),
+                        (1, "E001", "岩野", "employee", 1,
+                         "U4786cd63cad2f9cf56f6c01494d5cb0e", now_str),
+                    )
                 logger.info("seeded employee (direct insert) for line_user_id=U4786cd63...")
     except Exception as seed_exc:  # diagnostics: never fatal
         logger.warning("employee seed failed (not fatal): %s", seed_exc)
