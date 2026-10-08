@@ -261,6 +261,14 @@ def _schedule_from_payload(data: dict) -> dict:
 def health() -> dict:
     payload = {"status": "ok", "port": PORT, "schedules": len(load_schedules()),
                "schedules_store": "postgres" if USE_POSTGRES else "json"}
+    # The bike tab is a static file under /bike/. If that directory is missing
+    # on the deployed build (push failed, sync script skipped it, ...), the
+    # tab will 404 in the LIFF with no clue why. Probe it here so one GET
+    # distinguishes "code bug" from "the file did not make it into the image".
+    payload["bike_dir_exists"] = (BASE_DIR / "bike").is_dir()
+    payload["bike_dir_listing"] = sorted(
+        p.name for p in (BASE_DIR / "bike").iterdir()
+    ) if (BASE_DIR / "bike").is_dir() else None
     # Report whether the ordering DB is actually reachable. /api/auth/login
     # returned a bare 500 with no body on Render while /health stayed green, so
     # "the app is mounted" was indistinguishable from "the database works".
