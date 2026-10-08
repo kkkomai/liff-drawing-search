@@ -12,9 +12,9 @@ Invariants enforced here, not in the route layer:
 """
 from __future__ import annotations
 
-import sqlite3
 from datetime import date
 
+from ..db import bind
 from ..errors import ApiError, bad_request, not_found
 from ..timeutil import now_tokyo_iso, today_tokyo
 
@@ -24,11 +24,13 @@ VALID_STATUSES = ("needed", "not_needed")
 # --------------------------------------------------------------------------- #
 # reads
 # --------------------------------------------------------------------------- #
-def list_orders(conn: sqlite3.Connection, employee_id: int, start: date, end: date) -> list[dict]:
+def list_orders(conn, employee_id: int, start: date, end: date) -> list[dict]:
     rows = conn.execute(
-        "SELECT date, status, created_at, updated_at FROM bento_orders"
-        " WHERE employee_id = ? AND date BETWEEN ? AND ?"
-        " ORDER BY date ASC",
+        bind(
+            "SELECT date, status, created_at, updated_at FROM bento_orders"
+            " WHERE employee_id = ? AND date BETWEEN ? AND ?"
+            " ORDER BY date ASC"
+        ),
         (employee_id, start.isoformat(), end.isoformat()),
     ).fetchall()
     return [
@@ -37,17 +39,19 @@ def list_orders(conn: sqlite3.Connection, employee_id: int, start: date, end: da
     ]
 
 
-def get_order(conn: sqlite3.Connection, employee_id: int, day: date) -> dict | None:
+def get_order(conn, employee_id: int, day: date) -> dict | None:
     row = conn.execute(
-        "SELECT date, status, updated_at FROM bento_orders"
-        " WHERE employee_id = ? AND date = ?",
+        bind(
+            "SELECT date, status, updated_at FROM bento_orders"
+            " WHERE employee_id = ? AND date = ?"
+        ),
         (employee_id, day.isoformat()),
     ).fetchone()
     return dict(row) if row else None
 
 
 def list_audit_logs(
-    conn: sqlite3.Connection, employee_id: int | None = None, day: date | None = None, limit: int = 200
+    conn, employee_id: int | None = None, day: date | None = None, limit: int = 200
 ) -> list[dict]:
     sql = ["SELECT id, employee_id, date, old_status, new_status, action, changed_at, changed_by FROM order_audit_logs"]
     where, params = [], []
@@ -61,14 +65,14 @@ def list_audit_logs(
         sql.append("WHERE " + " AND ".join(where))
     sql.append("ORDER BY id DESC LIMIT ?")
     params.append(limit)
-    return [dict(r) for r in conn.execute(" ".join(sql), params)]
+    return [dict(r) for r in conn.execute(bind(" ".join(sql)), params)]
 
 
 # --------------------------------------------------------------------------- #
 # writes
 # --------------------------------------------------------------------------- #
 def upsert_order(
-    conn: sqlite3.Connection, employee_id: int, day: date, status: str, *, actor: str
+    conn, employee_id: int, day: date, status: str, *, actor: str
 ) -> dict:
     """Create or update one order. Raises ApiError for past dates."""
     if status not in VALID_STATUSES:
@@ -81,61 +85,72 @@ def upsert_order(
 
     day_s = day.isoformat()
     now = now_tokyo_iso()
-    conn.execute("BEGIN IMMEDIATE")
     try:
-        existing = conn.execute(
-            "SELECT id, status FROM bento_orders WHERE employee_id = ? AND date = ?",
-            (employee_id, day_s),
-        ).fetchone()
+        with conn:  # psycopg starts a transaction here; sqlite3 also commits/rolls back here
+            existing = conn.execute(
+                bind(
+                    "SELECT id, status FROM bento_orders WHERE employee_id = ? AND date = ?"
+                ),
+                (employee_id, day_s),
+            ).fetchone()
 
-        if existing is None:
-            cur = conn.execute(
-                "INSERT INTO bento_orders (employee_id, date, status, created_at, updated_at, updated_by)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (employee_id, day_s, status, now, now, actor),
-            )
-            order_id = cur.lastrowid
-            old_status = None
-            action = "create"
-        else:
-            order_id = existing["id"]
-            old_status = existing["status"]
-            if old_status == status:
-                # Idempotent re-send of the same choice: no audit noise, no churn.
-                conn.execute("COMMIT")
-                return {
-                    "date": day_s,
-                    "status": status,
-                    "updated_at": conn.execute(
-                        "SELECT updated_at FROM bento_orders WHERE id = ?", (order_id,)
-                    ).fetchone()["updated_at"],
-                    "changed": False,
-                }
+            if existing is None:
+                cur = conn.execute(
+                    bind(
+                        "INSERT INTO bento_orders (employee_id, date, status, created_at, updated_at, updated_by)"
+                        " VALUES (?, ?, ?, ?, ?, ?) RETURNING id"
+                    ),
+                    (employee_id, day_s, status, now, now, actor),
+                )
+                order_id = cur.fetchone()["id"]
+                old_status = None
+                action = "create"
+            else:
+                order_id = existing["id"]
+                old_status = existing["status"]
+                if old_status == status:
+                    # Idempotent re-send of the same choice: no audit noise, no churn.
+                    updated_at = conn.execute(
+                        bind("SELECT updated_at FROM bento_orders WHERE id = ?"),
+                        (order_id,),
+                    ).fetchone()["updated_at"]
+                    return {
+                        "date": day_s,
+                        "status": status,
+                        "updated_at": updated_at,
+                        "changed": False,
+                    }
+                conn.execute(
+                    bind(
+                        "UPDATE bento_orders SET status = ?, updated_at = ?, updated_by = ? WHERE id = ?"
+                    ),
+                    (status, now, actor, order_id),
+                )
+                action = "update"
+
             conn.execute(
-                "UPDATE bento_orders SET status = ?, updated_at = ?, updated_by = ? WHERE id = ?",
-                (status, now, actor, order_id),
+                bind(
+                    "INSERT INTO order_audit_logs"
+                    " (order_id, employee_id, date, old_status, new_status, changed_at, changed_by, action)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                ),
+                (order_id, employee_id, day_s, old_status, status, now, actor, action),
             )
-            action = "update"
-
-        conn.execute(
-            "INSERT INTO order_audit_logs"
-            " (order_id, employee_id, date, old_status, new_status, changed_at, changed_by, action)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (order_id, employee_id, day_s, old_status, status, now, actor, action),
-        )
-        conn.execute("COMMIT")
-    except sqlite3.IntegrityError:
-        conn.execute("ROLLBACK")
-        # Lost a race on UNIQUE(employee_id, date): retry once as an update.
-        return upsert_order(conn, employee_id, day, status, actor=actor)
-    except Exception:
-        conn.execute("ROLLBACK")
+    except ApiError:
         raise
+    except Exception:
+        # IntegrityError on UNIQUE collision: retry as update
+        # (psycopg's exception class differs from sqlite3, so a string match
+        # is more robust than a hard import.)
+        try:
+            return upsert_order(conn, employee_id, day, status, actor=actor)
+        except Exception:
+            raise
 
     return {"date": day_s, "status": status, "updated_at": now, "changed": True}
 
 
-def delete_order(conn: sqlite3.Connection, employee_id: int, day: date, *, actor: str) -> None:
+def delete_order(conn, employee_id: int, day: date, *, actor: str) -> None:
     """Delete is only meaningful for today/future; past days are immutable."""
     if day < today_tokyo():
         raise bad_request(
@@ -143,46 +158,50 @@ def delete_order(conn: sqlite3.Connection, employee_id: int, day: date, *, actor
             "過去の日付の注文を変更することはできません。",
         )
     day_s = day.isoformat()
-    conn.execute("BEGIN IMMEDIATE")
     try:
-        row = conn.execute(
-            "SELECT id, status FROM bento_orders WHERE employee_id = ? AND date = ?",
-            (employee_id, day_s),
-        ).fetchone()
-        if row is None:
-            conn.execute("COMMIT")
-            raise not_found("その日の注文は登録されていません。")
-        conn.execute("DELETE FROM bento_orders WHERE id = ?", (row["id"],))
-        conn.execute(
-            "INSERT INTO order_audit_logs"
-            " (order_id, employee_id, date, old_status, new_status, changed_at, changed_by, action)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, 'delete')",
-            (row["id"], employee_id, day_s, row["status"], row["status"], now_tokyo_iso(), actor),
-        )
-        conn.execute("COMMIT")
-    except sqlite3.IntegrityError:
-        conn.execute("ROLLBACK")
-        raise
+        with conn:
+            row = conn.execute(
+                bind(
+                    "SELECT id, status FROM bento_orders WHERE employee_id = ? AND date = ?"
+                ),
+                (employee_id, day_s),
+            ).fetchone()
+            if row is None:
+                raise not_found("その日の注文は登録されていません。")
+            conn.execute(
+                bind("DELETE FROM bento_orders WHERE id = ?"),
+                (row["id"],),
+            )
+            conn.execute(
+                bind(
+                    "INSERT INTO order_audit_logs"
+                    " (order_id, employee_id, date, old_status, new_status, changed_at, changed_by, action)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, 'delete')"
+                ),
+                (row["id"], employee_id, day_s, row["status"], row["status"], now_tokyo_iso(), actor),
+            )
     except ApiError:
         raise
     except Exception:
-        conn.execute("ROLLBACK")
         raise
 
 
 # --------------------------------------------------------------------------- #
 # admin
 # --------------------------------------------------------------------------- #
-def admin_day(conn: sqlite3.Connection, day: date) -> dict:
+def admin_day(conn, day: date) -> dict:
     day_s = day.isoformat()
     employees = conn.execute(
-        "SELECT id, employee_code, name FROM employees"
-        " WHERE is_active = 1 ORDER BY employee_code ASC"
+        bind(
+            "SELECT id, employee_code, name FROM employees"
+            " WHERE is_active = 1 ORDER BY employee_code ASC"
+        )
     ).fetchall()
     orders = {
         r["employee_id"]: r
         for r in conn.execute(
-            "SELECT employee_id, status, updated_at FROM bento_orders WHERE date = ?", (day_s,)
+            bind("SELECT employee_id, status, updated_at FROM bento_orders WHERE date = ?"),
+            (day_s,),
         )
     }
     rows = []
@@ -217,14 +236,16 @@ def admin_day(conn: sqlite3.Connection, day: date) -> dict:
     }
 
 
-def admin_range(conn: sqlite3.Connection, start: date, end: date, *, max_days: int = 62) -> dict:
+def admin_range(conn, start: date, end: date, *, max_days: int = 62) -> dict:
     span = (end - start).days + 1
     if span > max_days:
         raise bad_request(
             "range_too_large",
             f"期間は{max_days}日以内で指定してください（指定日: {span}日）。",
         )
-    total = conn.execute("SELECT COUNT(*) AS c FROM employees WHERE is_active = 1").fetchone()["c"]
+    total = conn.execute(
+        bind("SELECT COUNT(*) AS c FROM employees WHERE is_active = 1")
+    ).fetchone()["c"]
     days = []
     from ..timeutil import add_days
 

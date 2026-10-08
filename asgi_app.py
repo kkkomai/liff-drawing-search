@@ -192,22 +192,33 @@ def health() -> dict:
     # "the app is mounted" was indistinguishable from "the database works".
     # Probe it here so one request tells us which half is broken.
     try:
-        from app.db import get_conn  # type: ignore
+        from app.db import bind, get_conn, kind  # type: ignore
 
         _conn = get_conn()
         _row = _conn.execute(
-            "SELECT COUNT(*) AS n FROM employees"
+            bind("SELECT COUNT(*) AS n FROM employees")
         ).fetchone()
+        # Reflect the *actual* backend the bento module connected to. Reading
+        # BENTO_DATABASE_PATH was misleading once DATABASE_URL takes over (the
+        # env var still holds the old SQLite path, so /health claimed SQLite
+        # while the API was happily using Postgres).
+        backend = kind()
+        path = None
+        if backend == "sqlite":
+            from app.config import get_settings  # type: ignore
+            path = get_settings().database_path
         payload["db"] = {
             "reachable": True,
             "employees": _row["n"] if _row else 0,
-            "path": os.environ.get("BENTO_DATABASE_PATH", ""),
+            "path": path,
+            "backend": backend,
         }
     except Exception as exc:  # noqa: BLE001 - diagnostics must never raise
         payload["db"] = {
             "reachable": False,
             "error": f"{exc.__class__.__name__}: {exc}",
-            "path": os.environ.get("BENTO_DATABASE_PATH", ""),
+            "path": None,
+            "backend": "unknown",
         }
     # The bento settings object is optional here: the form site must stay usable
     # even when the ordering backend is not wired in. Report the mode when we

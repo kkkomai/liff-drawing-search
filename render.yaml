@@ -19,6 +19,11 @@ services:
     #   BENTO_PUBLIC_API_BASE_URL=https://liff-drawing-search.onrender.com
     #   BENTO_CORS_ORIGINS=https://liff-drawing-search.onrender.com
     #   BENTO_DATABASE_PATH=/tmp/bento.db
+    #   # Switch bento to the shared Neon Postgres (same DATABASE_URL as
+    #   # schedules) so お弁当注文 data survives 15-min render free-tier
+    #   # sleep cycles. Schedules and bento share the same database with
+    #   # independent table namespaces, so this requires no schema merge.
+    #   DATABASE_URL=postgresql://...
     #   BENTO_LINE_CHANNEL_ID=<LIFF app's Channel ID>
     #   BENTO_LINE_CHANNEL_SECRET=<LIFF app's Channel secret>
     #

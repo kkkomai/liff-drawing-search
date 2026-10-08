@@ -12,7 +12,7 @@ import logging
 from fastapi import APIRouter, Depends, Request
 
 from ..config import Settings, get_settings
-from ..db import get_conn
+from ..db import bind, get_conn
 from ..errors import ApiError, forbidden, unauthorized
 from ..models import EmployeeOut, LoginRequest, LoginResponse
 from ..security.line_token import TokenError, verify_id_token
@@ -68,7 +68,7 @@ def login(body: LoginRequest, settings: Settings = Depends(get_settings)) -> Log
 
     conn = get_conn()
     row = conn.execute(
-        "SELECT id, employee_code, name, role, is_active FROM employees WHERE line_user_id = ?",
+        bind("SELECT id, employee_code, name, role, is_active FROM employees WHERE line_user_id = ?"),
         (body.line_user_id,),
     ).fetchone()
     if row is None or not row["is_active"]:

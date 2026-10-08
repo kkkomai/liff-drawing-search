@@ -10,6 +10,7 @@ import secrets
 from datetime import datetime, timedelta
 
 from ..config import Settings
+from ..db import bind
 from ..timeutil import now_tokyo, now_tokyo_iso
 
 
@@ -25,8 +26,10 @@ def create_session(conn, employee_id: int, settings: Settings) -> dict:
     token = new_session_token()
     expires_at = now_tokyo() + timedelta(hours=settings.session_ttl_hours)
     conn.execute(
-        "INSERT INTO sessions (token_hash, employee_id, created_at, expires_at)"
-        " VALUES (?, ?, ?, ?)",
+        bind(
+            "INSERT INTO sessions (token_hash, employee_id, created_at, expires_at)"
+            " VALUES (?, ?, ?, ?)"
+        ),
         (hash_token(token), employee_id, now_tokyo_iso(), expires_at.isoformat(timespec="seconds")),
     )
     return {"token": token, "expires_at": expires_at.isoformat(timespec="seconds")}
@@ -35,11 +38,13 @@ def create_session(conn, employee_id: int, settings: Settings) -> dict:
 def resolve_session(conn, token: str) -> dict | None:
     """Return the employee row bound to a live session, else None."""
     row = conn.execute(
-        "SELECT s.expires_at, s.revoked_at, e.id AS employee_id, e.employee_code, e.name,"
-        "       e.role, e.is_active"
-        "  FROM sessions s"
-        "  JOIN employees e ON e.id = s.employee_id"
-        " WHERE s.token_hash = ?",
+        bind(
+            "SELECT s.expires_at, s.revoked_at, e.id AS employee_id, e.employee_code, e.name,"
+            "       e.role, e.is_active"
+            "  FROM sessions s"
+            "  JOIN employees e ON e.id = s.employee_id"
+            " WHERE s.token_hash = ?"
+        ),
         (hash_token(token),),
     ).fetchone()
     if row is None:
@@ -59,6 +64,6 @@ def resolve_session(conn, token: str) -> dict | None:
 
 def revoke_session(conn, token: str) -> None:
     conn.execute(
-        "UPDATE sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL",
+        bind("UPDATE sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL"),
         (now_tokyo_iso(), hash_token(token)),
     )

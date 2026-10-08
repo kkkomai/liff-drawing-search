@@ -1,30 +1,55 @@
-"""SQLite connection handling plus a tiny forward-only migration runner.
+"""Database connection: SQLite (default) or Postgres (when DATABASE_URL is set).
 
-Design notes
-------------
-* WAL + ``busy_timeout`` so concurrent readers never block on the writer.
-* Foreign keys are ON (SQLite defaults them OFF) so ``ON DELETE CASCADE``
-  actually fires.
-* Migrations are ``NNN_name.sql`` files in ``app/migrations`` applied in
-  lexical order exactly once, tracked in ``schema_migrations``.
+Operators can flip between backends purely by setting ``DATABASE_URL`` —
+nothing in business code needs to change. The two backends share the
+``row["col"]`` access pattern (psycopg uses ``dict_row``; sqlite3 uses
+``sqlite3.Row``), and the psycopg connection auto-commits on `with conn:`
+just like sqlite3.
+
+Postgres compatibility notes
+----------------------------
+* SQL placeholders use ``%s`` (psycopg style) instead of SQLite's ``?``.
+  ``bind()`` rewrites ``?`` → ``%s`` at call time so business code can keep
+  using ``?`` for the SQLite path without manual translation per query.
+* Transactional writes use the standard ``with conn:`` / ``conn.commit()`` /
+  ``conn.rollback()`` API. The Postgres connection is created with
+  ``autocommit=False`` so ``with conn:`` actually opens a transaction.
+* ``executescript()`` is SQLite-only; the migration runner uses
+  ``conn.execute(sql)`` per statement instead.
+* The bento schema differs only in primary keys: SQLite uses
+  ``INTEGER PRIMARY KEY AUTOINCREMENT``, Postgres uses ``SERIAL PRIMARY
+  KEY``. Migrations are paired files (``001_initial.sql`` /
+  ``001_initial_postgres.sql``); the runner picks the right one based on
+  the active backend.
 """
 from __future__ import annotations
 
+import logging
+import os
 import sqlite3
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 
 from .config import get_settings
 from .timeutil import now_tokyo_iso
+
+logger = logging.getLogger(__name__)
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 _local = threading.local()
 
 
-def _connect(path: str) -> sqlite3.Connection:
+def _is_postgres() -> bool:
+    """True when the operator wants the Postgres backend (DATABASE_URL set)."""
+    if os.environ.get("DATABASE_URL", "").strip():
+        return True
+    return bool(get_settings().database_url)
+
+
+def _connect_sqlite(path: str) -> sqlite3.Connection:
     db_path = Path(path)
     if db_path.parent and str(db_path.parent) not in ("", "."):
         db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -36,38 +61,107 @@ def _connect(path: str) -> sqlite3.Connection:
     return conn
 
 
-def get_conn() -> sqlite3.Connection:
-    """Per-thread connection to the configured database."""
+def _connect_postgres(url: str):
+    import psycopg
+    import psycopg.rows
+
+    conn = psycopg.connect(url, autocommit=False)
+    conn.row_factory = psycopg.rows.dict_row
+    return conn
+
+
+def get_conn():
+    """Per-thread connection (SQLite or Postgres) chosen from the environment."""
     conn = getattr(_local, "conn", None)
     key = getattr(_local, "db_key", None)
     settings = get_settings()
-    if conn is None or key != settings.database_path:
-        if conn is not None:
-            conn.close()
-        conn = _connect(settings.database_path)
-        _local.conn = conn
-        _local.db_key = settings.database_path
+    if _is_postgres():
+        url = os.environ.get("DATABASE_URL", "").strip() or settings.database_url
+        if conn is None or key != ("pg", url):
+            if conn is not None:
+                conn.close()
+            conn = _connect_postgres(url)
+            _local.conn = conn
+            _local.db_key = ("pg", url)
+            _local.kind = "pg"
+    else:
+        path = settings.database_path
+        if conn is None or key != ("sqlite", path):
+            if conn is not None:
+                conn.close()
+            conn = _connect_sqlite(path)
+            _local.conn = conn
+            _local.db_key = ("sqlite", path)
+            _local.kind = "sqlite"
     return conn
 
 
 def close_conn() -> None:
     conn = getattr(_local, "conn", None)
     if conn is not None:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
     _local.conn = None
     _local.db_key = None
+    _local.kind = None
 
 
-def _applied_versions(conn: sqlite3.Connection) -> set[str]:
+def kind() -> str:
+    return getattr(_local, "kind", "sqlite")
+
+
+def bind(sql: str) -> str:
+    """Translate SQLite '?' placeholders to Postgres '%s' for the Postgres backend.
+
+    Use at every ``conn.execute(sql, params)`` call site so the same SQL
+    string works on both backends without manual rewriting.
+    """
+    if kind() == "pg":
+        return sql.replace("?", "%s")
+    return sql
+
+
+def lastrowid(cur) -> int | None:
+    """Return the rowid of the last INSERT.
+
+    On psycopg 3, ``cur.lastrowid`` is supported and ``INSERT ... RETURNING id``
+    is the idiomatic way. On sqlite3, ``cur.lastrowid`` is the same as
+    ``Cursor.lastrowid``. This helper hides the difference: callers should
+    use ``RETURNING id`` and ``cur.fetchone()["id"]`` (preferred) or this
+    helper as a fallback.
+    """
+    return getattr(cur, "lastrowid", None)
+
+
+def _applied_versions(conn) -> set[str]:
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS schema_migrations ("
-        " version TEXT PRIMARY KEY,"
-        " applied_at TEXT NOT NULL)"
+        bind(
+            "CREATE TABLE IF NOT EXISTS schema_migrations ("
+            " version TEXT PRIMARY KEY,"
+            " applied_at TEXT NOT NULL)"
+        )
     )
-    return {r["version"] for r in conn.execute("SELECT version FROM schema_migrations")}
+    conn.commit()
+    return {r["version"] for r in conn.execute(bind("SELECT version FROM schema_migrations"))}
 
 
-def migrate(conn: sqlite3.Connection | None = None) -> list[str]:
+def _resolve_migration_file(version: str) -> Path | None:
+    """Pick the right SQL file for the active backend, falling back to the
+    shared name when only one variant exists.
+    """
+    suffix = "_postgres" if kind() == "pg" else ""
+    primary = MIGRATIONS_DIR / f"{version}_initial{suffix}.sql"
+    if primary.exists():
+        return primary
+    alt = MIGRATIONS_DIR / f"{version}_initial.sql"
+    if alt.exists():
+        return alt
+    return None
+
+
+def migrate(conn=None) -> list[str]:
     """Apply pending migrations; returns the versions applied by this call."""
     own = conn is None
     conn = conn or get_conn()
@@ -77,12 +171,27 @@ def migrate(conn: sqlite3.Connection | None = None) -> list[str]:
         version = path.name.split("_", 1)[0]
         if version in applied:
             continue
-        with conn:  # transaction: either the whole file lands or none of it
-            conn.executescript(path.read_text(encoding="utf-8"))
-            conn.execute(
-                "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
-                (version, now_tokyo_iso()),
-            )
+        is_pg_file = path.name.endswith("_postgres.sql")
+        if is_pg_file and kind() != "pg":
+            continue
+        if not is_pg_file and kind() == "pg":
+            pg_path = MIGRATIONS_DIR / f"{version}_initial_postgres.sql"
+            if pg_path.exists():
+                continue
+        sql_text = path.read_text(encoding="utf-8")
+        try:
+            with conn:  # opens a transaction; auto-rollback on raise
+                # exec a multi-statement SQL string one statement at a time
+                # (executescript() is SQLite-only).
+                for stmt in [s.strip() for s in sql_text.split(";") if s.strip()]:
+                    conn.execute(stmt)
+                conn.execute(
+                    bind("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)"),
+                    (version, now_tokyo_iso()),
+                )
+        except Exception:
+            logger.exception("migration %s failed", path.name)
+            raise
         done.append(path.name)
     if own:
         pass

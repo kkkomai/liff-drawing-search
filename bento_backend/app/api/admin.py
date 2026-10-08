@@ -6,7 +6,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
-from ..db import get_conn
+from ..db import bind, get_conn
 from ..errors import ApiError, bad_request
 from ..models import AdminDayOut, AdminRangeOut, AdminSummary
 from ..services.line_form import LineFormError, get_liff_app_link, push_liff_app_url
@@ -71,13 +71,15 @@ def admin_audit(
 def admin_summary(_: dict = Depends(require_admin)) -> AdminSummary:
     conn = get_conn()
     total = conn.execute(
-        "SELECT COUNT(*) AS c FROM employees WHERE is_active = 1"
+        bind("SELECT COUNT(*) AS c FROM employees WHERE is_active = 1")
     ).fetchone()["c"]
     row = conn.execute(
-        "SELECT"
-        " SUM(CASE WHEN status = 'needed' THEN 1 ELSE 0 END) AS needed,"
-        " SUM(CASE WHEN status = 'not_needed' THEN 1 ELSE 0 END) AS not_needed"
-        " FROM bento_orders WHERE date = ?",
+        bind(
+            "SELECT"
+            " SUM(CASE WHEN status = 'needed' THEN 1 ELSE 0 END) AS needed,"
+            " SUM(CASE WHEN status = 'not_needed' THEN 1 ELSE 0 END) AS not_needed"
+            " FROM bento_orders WHERE date = ?"
+        ),
         (today_tokyo().isoformat(),),
     ).fetchone()
     needed = row["needed"] or 0

@@ -42,6 +42,12 @@ class Settings(BaseSettings):
 
     # --- storage -----------------------------------------------------------
     database_path: str = Field(default="data/bento.db")
+    # When set, switches the bento backend to a managed Postgres (psycopg).
+    # DATABASE_URL is read directly by app.db so the same connection string
+    # powers both schedules (root project) and bento (sub-project) without
+    # duplicating it through pydantic — and without forcing operators to set
+    # BENTO_DATABASE_URL on top of DATABASE_URL.
+    database_url: str | None = Field(default=None)
 
     # --- LINE LIFF / ID token verification --------------------------------
     line_channel_id: str | None = Field(default=None)
