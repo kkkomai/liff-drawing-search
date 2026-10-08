@@ -119,7 +119,15 @@ def bind(sql: str) -> str:
     string works on both backends without manual rewriting.
     """
     if kind() == "pg":
-        return sql.replace("?", "%s")
+        out = sql.replace("?", "%s")
+        # Postgres has no implicit cast between TEXT and DATE. SQLite happily
+        # compared `text_col >= CURRENT_DATE` because the TEXT gets coerced,
+        # but psycopg raises `operator does not exist: text >= date`. Wrap
+        # CURRENT_DATE / CURRENT_TIMESTAMP in to_char() so both sides are
+        # TEXT, mirroring the `YYYY-MM-DD` shape that the bento schema uses.
+        out = out.replace("CURRENT_DATE", "to_char(CURRENT_DATE, 'YYYY-MM-DD')")
+        out = out.replace("CURRENT_TIMESTAMP", "to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD\"T\"HH24:MI:SS')")
+        return out
     return sql
 
 
