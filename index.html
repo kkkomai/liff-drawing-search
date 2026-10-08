@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261001final</title>
-  <script>window.__v="20261001w";</script>
+  <title>申請フォーム - v20261008bike</title>
+  <script>window.__v="20261008bike";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20260917c)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261008bike)</span></h1>
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -95,6 +95,7 @@
       <button id="tab-overtime-btn" class="tab active" data-tab="overtime" ontouchstart="switchTab('overtime')" onclick="switchTab('overtime')">残業申請</button>
       <button id="tab-paid-btn" class="tab" data-tab="paid" ontouchstart="switchTab('paid')" onclick="switchTab('paid')">有給申請</button>
       <button id="tab-bento-btn" class="tab" data-tab="bento" ontouchstart="switchTab('bento')" onclick="switchTab('bento')">お弁当注文</button>
+      <button id="tab-bike-btn" class="tab" data-tab="bike" ontouchstart="switchTab('bike')" onclick="switchTab('bike')">自転車ログ</button>
     </div>
 
   <div class="tab-content active" id="tab-overtime">
@@ -204,6 +205,17 @@
             data-src="bento/index.html?embedded=1"></iframe>
   </div>
 
+  <div class="tab-content" id="tab-bike">
+    <!-- Bike-log tab. Self-contained HTML at /bike/index.html, served as a
+         static file. The host hands the LIFF idToken over via postMessage
+         because liff.init may only run once per document. The iframe is
+         given a fixed pixel height — calc(100vh - Npx) collapses to 0
+         inside the LINE WebView and the tab reads as a blank panel. -->
+    <iframe id="bike-frame" title="自転車ログ"
+            style="width:100%;height:720px;min-height:720px;border:0;display:block;background:#f5f6f8;"
+            data-src="bike/index.html?embedded=1"></iframe>
+  </div>
+
   <div class="editor-overlay" id="editor-overlay" style="display:none !important;">
     <div class="editor-header">
       <span>画像編集（4:3 / 3:4）</span>
@@ -256,14 +268,28 @@
       console.log('switchTab: showing ' + tabName);
       console.log('switchTab called: ' + tabName);
       if (tabName === 'bento') ensureBentoFrame();
+      if (tabName === 'bike') ensureBikeFrame();
     }
 
     // === BENTO TAB (iframe + postMessage credential handoff) ===
     // お弁当注文バックエンドの公開ベースURL。1箇所だけ直せば全タブに効く。
     // 空文字なら同一オリジン運用（bento をこのサーバーと同じホストに配る場合）。
     var BENTO_API_BASE = '';
-    // liff.init can only run once per document, so the bento app inside the
-    // iframe cannot initialise LIFF itself. The host passes the ID token down.
+    // liff.init can only run once per document, so embedded tabs (bento, bike)
+    // cannot initialise LIFF themselves. The host reads the token ONCE and
+    // hands it to every child via postMessage, with the same payload shape.
+    function buildLiffCredentials() {
+      var p = { lineUserId: null, idToken: null, error: null };
+      try { p.lineUserId = liff.getContext().userId || null; } catch (e) { p.lineUserId = null; }
+      try {
+        var decoded = liff.getDecodedIDToken();
+        p.idToken = decoded && decoded.jwt ? decoded.jwt : null;
+      } catch (e) {
+        p.idToken = null;
+        p.error = (e && (e.message || e.code || e.name)) || String(e);
+      }
+      return p;
+    }
     function ensureBentoFrame() {
       var frame = document.getElementById('bento-frame');
       if (!frame) return;
@@ -416,10 +442,80 @@
 
     // The iframe asks for credentials once it boots; answer immediately.
     window.addEventListener('message', function (ev) {
-      if (!ev.data || ev.data.type !== 'bento-ready') return;
-      log('bento iframe requested credentials');
-      sendBentoCredentials();
+      if (!ev.data || !ev.data.type) return;
+      if (ev.data.type === 'bento-ready') {
+        log('bento iframe requested credentials');
+        sendBentoCredentials();
+        return;
+      }
+      if (ev.data.type === 'bike-ready') {
+        log('bike iframe requested credentials');
+        sendBikeCredentials();
+        return;
+      }
     });
+
+    // === BIKE TAB (same pattern as bento) ===
+    var bikeRetryTimer = null;
+    var BIKE_MAX_RETRIES = 200;
+    var bikeRetries = 0;
+
+    function ensureBikeFrame() {
+      var frame = document.getElementById('bike-frame');
+      if (!frame) return;
+      if (frame.dataset.loaded !== '1') {
+        // bike lives on the same origin as the host (this server serves /bike/),
+        // so no apiBase override is needed; the child reads its own location.
+        frame.src = frame.dataset.src;
+        frame.dataset.loaded = '1';
+        log('ensureBikeFrame: loading ' + frame.src);
+      }
+      sendBikeCredentials();
+    }
+
+    function sendBikeCredentials() {
+      var frame = document.getElementById('bike-frame');
+      if (!frame || !frame.contentWindow) return;
+      var cred = buildLiffCredentials();
+      if (!cred.lineUserId) {
+        diag('3b. 自転車ログ', 'userId 未取得（リトライ中）');
+        scheduleBikeCredentials();
+        return;
+      }
+      var payload = {
+        type: 'bike-credentials',
+        lineUserId: cred.lineUserId,
+        idToken: cred.idToken,
+        apiBase: window.location.origin,
+      };
+      frame.contentWindow.postMessage(payload, window.location.origin);
+      log('sendBikeCredentials: sent to bike iframe');
+    }
+
+    function scheduleBikeCredentials() {
+      if (bikeRetryTimer) return;
+      if (bikeRetries >= BIKE_MAX_RETRIES) {
+        log('sendBikeCredentials: giving up after ' + bikeRetries + ' retries', true);
+        try {
+          var stuck = document.getElementById('bike-frame');
+          if (stuck && stuck.contentWindow) {
+            stuck.contentWindow.postMessage({
+              type: 'bike-auth-error',
+              message: whyLiffUnavailable(),
+            }, window.location.origin);
+          }
+        } catch (e) {
+          log('sendBikeCredentials: could not deliver auth error: ' + e.message, true);
+        }
+        return;
+      }
+      bikeRetries++;
+      bikeRetryTimer = setTimeout(function () {
+        bikeRetryTimer = null;
+        sendBikeCredentials();
+      }, 300);
+    }
+    function resetBikeCredentials() { bikeRetries = 0; }
 
     // === LOGGING ===
     var logEl = document.getElementById('debug-log');

@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#16a34a" />
+  <title>自転車ログ</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="" />
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --fg: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --accent: #16a34a;
+      --accent-fg: #ffffff;
+      --danger: #dc2626;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    header {
+      background: var(--accent);
+      color: var(--accent-fg);
+      padding: 12px 16px;
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .badge { font-size: 11px; opacity: 0.85; }
+    main { padding: 12px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .row + .row { margin-top: 8px; }
+    label {
+      flex: 0 0 90px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    input[type="date"],
+    input[type="number"],
+    input[type="text"],
+    textarea {
+      flex: 1;
+      min-width: 0;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+      background: #ffffff;
+    }
+    textarea { min-height: 60px; resize: vertical; }
+    button {
+      padding: 10px 14px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    button.primary {
+      background: var(--accent);
+      color: var(--accent-fg);
+      width: 100%;
+    }
+    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    .gps-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .gps-row > button { flex: 1; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .stat {
+      text-align: center;
+      padding: 8px 4px;
+      background: #f1f5f9;
+      border-radius: 6px;
+    }
+    .stat .v { font-size: 16px; font-weight: 700; color: var(--fg); }
+    .stat .u { font-size: 10px; color: var(--muted); }
+    #map {
+      width: 100%;
+      height: 220px;
+      border-radius: 8px;
+      background: #e2e8f0;
+      margin-top: 8px;
+    }
+    .log-item {
+      border-top: 1px solid var(--border);
+      padding: 10px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .log-item:first-of-type { border-top: none; }
+    .log-item .info { flex: 1; min-width: 0; }
+    .log-item .info .d { font-weight: 600; font-size: 13px; }
+    .log-item .info .m { font-size: 12px; color: var(--muted); }
+    .log-item .info .n {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .empty { color: var(--muted); text-align: center; padding: 14px; }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.92);
+      color: #f8fafc;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 9999;
+      max-width: 90%;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { background: #b91c1c; }
+    .summary {
+      display: flex;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .summary b { color: var(--fg); font-size: 16px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span>🚴 自転車ログ</span>
+    <span class="badge" id="apiStatus">接続待機</span>
+  </header>
+
+  <main>
+    <div id="authWait" class="card" style="display:none;">
+      <h2>認証待ち</h2>
+      <div class="empty">ホストアプリからの認証情報を待機しています...</div>
+    </div>
+
+    <div id="formCard" class="card">
+      <h2>新しい記録</h2>
+      <div class="row">
+        <label for="date">日付</label>
+        <input type="date" id="date" />
+      </div>
+      <div class="row">
+        <label for="distance">距離 (km)</label>
+        <input type="number" id="distance" inputmode="decimal" step="0.1" min="0" placeholder="例: 25.4" />
+      </div>
+      <div class="row">
+        <label for="duration">時間 (分)</label>
+        <input type="number" id="duration" inputmode="numeric" step="1" min="0" placeholder="例: 75" />
+      </div>
+      <div class="row">
+        <label for="title">タイトル</label>
+        <input type="text" id="title" placeholder="例: 草津〜京都" />
+      </div>
+      <div class="row">
+        <label for="note">メモ</label>
+        <textarea id="note" placeholder="天気・ルート・体調など"></textarea>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button class="ghost" id="gpsToggle">📍 GPS記録 開始</button>
+        <span id="gpsState" style="font-size:12px;color:var(--muted);"></span>
+      </div>
+      <div id="map" style="display:none;"></div>
+      <div class="stats" id="gpsStats" style="display:none;">
+        <div class="stat"><div class="v" id="gpsDist">0.0</div><div class="u">km</div></div>
+        <div class="stat"><div class="v" id="gpsTime">00:00</div><div class="u">time</div></div>
+        <div class="stat"><div class="v" id="gpsSpd">0.0</div><div class="u">km/h</div></div>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <button class="primary" id="saveBtn">保存</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>今月の記録</h2>
+      <div class="summary" id="summary"></div>
+      <div id="logList">
+        <div class="empty">読み込み中...</div>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+  <script>
+    // ---- postMessage contract with the host (index.html) ----
+    // Host -> child: { type: 'bike-credentials', apiBase, lineUserId?, idToken? }
+    // Child -> host: { type: 'bike-ready' }
+    // Host -> child: { type: 'bike-auth-error', message: '...' }
+    const STATE = {
+      apiBase: '',
+      lineUserId: '',
+      idToken: '',
+      authed: false,
+      logs: [],
+      gps: {
+        active: false,
+        watchId: null,
+        points: [],
+        polyline: [],         // [[lat,lng], ...]
+        startTs: 0,
+        totalDistanceM: 0,
+        lastPoint: null,
+        map: null,
+        marker: null,
+        polyLayer: null,
+        timer: null,
+      },
+    };
+
+    function todayISO() {
+      const d = new Date();
+      const tz = d.getTimezoneOffset() * 60000;
+      return new Date(d - tz).toISOString().slice(0, 10);
+    }
+    document.getElementById('date').value = todayISO();
+
+    function showToast(msg, isError) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show' + (isError ? ' error' : '');
+      setTimeout(() => { el.className = 'toast' + (isError ? ' error' : ''); }, 2400);
+    }
+
+    function setStatus(text, ok) {
+      const el = document.getElementById('apiStatus');
+      el.textContent = text;
+      el.style.color = ok ? '#bbf7d0' : '#fecaca';
+    }
+
+    // ---- postMessage handshake ----
+    function start() {
+      const params = new URLSearchParams(location.search);
+      if (params.get('embedded') !== '1') {
+        // Standalone / mock mode (open bike/index.html directly)
+        STATE.apiBase = params.get('apiBase') || '';
+        STATE.idToken = params.get('mockToken') || 'mock';
+        STATE.lineUserId = params.get('mockUser') || 'demo-user';
+        STATE.authed = true;
+        onAuthed();
+        return;
+      }
+      document.getElementById('authWait').style.display = 'block';
+      document.getElementById('formCard').style.opacity = '0.5';
+      setStatus('認証待ち', false);
+      // Ask host for credentials. Host also re-posts on bento-ready, so this
+      // handles the case where the iframe is mounted before the host boots.
+      let attempts = 0;
+      const ask = () => {
+        attempts += 1;
+        try {
+          window.parent.postMessage({ type: 'bike-ready' }, '*');
+        } catch (e) { /* parent may not be ready yet */ }
+        if (attempts < 60) setTimeout(ask, 500);
+        else showAuthFailure('ホストからの認証情報を取得できませんでした。タブを開き直してください。');
+      };
+      ask();
+    }
+
+    function showAuthFailure(msg) {
+      STATE.authed = false;
+      document.getElementById('authWait').style.display = 'block';
+      document.getElementById('authWait').innerHTML =
+        '<h2>認証エラー</h2><div class="empty" style="color:var(--danger);">' +
+        msg + '</div>';
+      setStatus('未接続', false);
+    }
+
+    window.addEventListener('message', (ev) => {
+      const d = ev.data || {};
+      if (d.type === 'bike-credentials') {
+        if (!d.apiBase) { showAuthFailure('APIベースURLが指定されていません。'); return; }
+        STATE.apiBase = d.apiBase;
+        STATE.idToken = d.idToken || '';
+        STATE.lineUserId = d.lineUserId || '';
+        STATE.authed = true;
+        onAuthed();
+      } else if (d.type === 'bike-auth-error') {
+        showAuthFailure(d.message || '認証に失敗しました。');
+      }
+    });
+
+    function onAuthed() {
+      document.getElementById('authWait').style.display = 'none';
+      document.getElementById('formCard').style.opacity = '1';
+      setStatus('接続済み', true);
+      loadLogs();
+    }
+
+    // ---- API ----
+    function authHeaders() {
+      const h = { 'Content-Type': 'application/json' };
+      if (STATE.idToken) h['Authorization'] = 'Bearer ' + STATE.idToken;
+      return h;
+    }
+
+    async function loadLogs(retry) {
+      retry = retry || 0;
+      try {
+        const r = await fetch(STATE.apiBase + '/bike-logs', {
+          headers: authHeaders(),
+          cache: 'no-store',
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        STATE.logs = j.logs || [];
+        renderLogs();
+        loadSummary();
+      } catch (e) {
+        if (retry < 3) {
+          await new Promise(res => setTimeout(res, 1000 * Math.pow(2, retry)));
+          return loadLogs(retry + 1);
+        }
+        STATE.logs = [];
+        renderLogs();
+        showToast('記録の読み込みに失敗: ' + e.message, true);
+      }
+    }
+
+    async function loadSummary() {
+      if (!STATE.idToken) return; // summary requires Postgres + auth
+      const ym = todayISO().slice(0, 7);
+      try {
+        const r = await fetch(STATE.apiBase + '/bike-logs/summary/' + ym, {
+          headers: authHeaders(),
+          cache: 'no-store',
+        });
+        if (!r.ok) return;
+        const j = await r.json();
+        const el = document.getElementById('summary');
+        el.innerHTML =
+          '<div><b>' + (j.count || 0) + '</b> 回</div>' +
+          '<div><b>' + (j.total_km || 0).toFixed(1) + '</b> km</div>' +
+          '<div><b>' + Math.round((j.total_min || 0) / 60 * 10) / 10 + '</b> h</div>';
+      } catch (e) { /* summary is best-effort */ }
+    }
+
+    function renderLogs() {
+      const list = document.getElementById('logList');
+      if (!STATE.logs.length) {
+        list.innerHTML = '<div class="empty">まだ記録がありません</div>';
+        return;
+      }
+      list.innerHTML = STATE.logs.map(function (l) {
+        const dist = (l.distance_km || 0).toFixed(1);
+        const dur = formatDuration(l.duration_min || 0);
+        const t = (l.title || '').replace(/[<>&]/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c]));
+        const n = (l.note || '').replace(/[<>&]/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c]));
+        return '<div class="log-item">' +
+          '<div class="info">' +
+            '<div class="d">' + l.date + ' &nbsp; ' + dist + ' km / ' + dur + '</div>' +
+            (t ? '<div class="n">' + t + '</div>' : '') +
+            (n ? '<div class="m">' + n + '</div>' : '') +
+          '</div>' +
+          '<button class="ghost" data-del="' + l.id + '">削除</button>' +
+        '</div>';
+      }).join('');
+      list.querySelectorAll('[data-del]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          deleteLog(btn.getAttribute('data-del'));
+        });
+      });
+    }
+
+    function formatDuration(min) {
+      const h = Math.floor(min / 60);
+      const m = min % 60;
+      return (h ? h + 'h' : '') + (m ? (h ? ' ' : '') + m + 'm' : '0m');
+    }
+
+    async function saveLog(payload) {
+      try {
+        const r = await fetch(STATE.apiBase + '/bike-logs', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(payload),
+        });
+        if (!r.ok) {
+          const t = await r.text();
+          throw new Error('HTTP ' + r.status + ' ' + t);
+        }
+        showToast('保存しました');
+        loadLogs();
+      } catch (e) {
+        showToast('保存失敗: ' + e.message, true);
+      }
+    }
+
+    async function deleteLog(id) {
+      if (!confirm('この記録を削除しますか？')) return;
+      try {
+        const r = await fetch(STATE.apiBase + '/bike-logs/' + encodeURIComponent(id), {
+          method: 'DELETE',
+          headers: authHeaders(),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        showToast('削除しました');
+        loadLogs();
+      } catch (e) {
+        showToast('削除失敗: ' + e.message, true);
+      }
+    }
+
+    // ---- Save button ----
+    document.getElementById('saveBtn').addEventListener('click', function () {
+      const date = document.getElementById('date').value;
+      const distance = parseFloat(document.getElementById('distance').value) || 0;
+      const duration = parseInt(document.getElementById('duration').value, 10) || 0;
+      const title = document.getElementById('title').value.trim();
+      const note = document.getElementById('note').value.trim();
+      if (!date) { showToast('日付を入力してください', true); return; }
+      if (distance <= 0 && STATE.gps.polyline.length < 2) {
+        showToast('距離を入力するか、GPS記録を使ってください', true); return;
+      }
+      const polyline = STATE.gps.polyline.length >= 2
+        ? STATE.gps.polyline
+        : [];
+      // If GPS ran, prefer its measured distance/duration.
+      let finalDist = distance;
+      let finalDur = duration;
+      if (STATE.gps.active || STATE.gps.polyline.length >= 2) {
+        finalDist = Math.round((STATE.gps.totalDistanceM / 1000) * 100) / 100 || distance;
+        finalDur = Math.round((Date.now() - STATE.gps.startTs) / 60000) || duration;
+      }
+      saveLog({
+        date: date,
+        distance_km: finalDist,
+        duration_min: finalDur,
+        title: title,
+        note: note,
+        polyline: polyline,
+      });
+    });
+
+    // ---- GPS ----
+    const gpsBtn = document.getElementById('gpsToggle');
+    const gpsStateEl = document.getElementById('gpsState');
+
+    gpsBtn.addEventListener('click', function () {
+      if (STATE.gps.active) {
+        stopGps();
+      } else {
+        startGps();
+      }
+    });
+
+    function startGps() {
+      if (!navigator.geolocation) {
+        showToast('このブラウザはGPSに対応していません', true);
+        return;
+      }
+      STATE.gps.active = true;
+      STATE.gps.polyline = [];
+      STATE.gps.totalDistanceM = 0;
+      STATE.gps.lastPoint = null;
+      STATE.gps.startTs = Date.now();
+      STATE.gps.watchId = navigator.geolocation.watchPosition(
+        onGpsPos, onGpsErr,
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
+      );
+      gpsBtn.textContent = '⏹ GPS記録 停止';
+      gpsStateEl.textContent = '計測中...';
+      document.getElementById('map').style.display = 'block';
+      document.getElementById('gpsStats').style.display = 'grid';
+      ensureMap();
+      STATE.gps.timer = setInterval(updateGpsStats, 1000);
+    }
+
+    function stopGps() {
+      STATE.gps.active = false;
+      if (STATE.gps.watchId != null) {
+        navigator.geolocation.clearWatch(STATE.gps.watchId);
+        STATE.gps.watchId = null;
+      }
+      if (STATE.gps.timer) { clearInterval(STATE.gps.timer); STATE.gps.timer = null; }
+      gpsBtn.textContent = '📍 GPS記録 開始';
+      gpsStateEl.textContent = STATE.gps.polyline.length + '点 / ' +
+        (STATE.gps.totalDistanceM / 1000).toFixed(2) + ' km';
+    }
+
+    function onGpsPos(pos) {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const p = [lat, lng];
+      if (STATE.gps.lastPoint) {
+        STATE.gps.totalDistanceM += haversineMeters(STATE.gps.lastPoint, p);
+      }
+      STATE.gps.lastPoint = p;
+      STATE.gps.polyline.push(p);
+      updateMap(p);
+    }
+
+    function onGpsErr(err) {
+      gpsStateEl.textContent = 'GPS取得失敗: ' + err.message;
+    }
+
+    function haversineMeters(a, b) {
+      const R = 6371000;
+      const toRad = d => d * Math.PI / 180;
+      const dLat = toRad(b[0] - a[0]);
+      const dLng = toRad(b[1] - a[1]);
+      const s = Math.sin(dLat/2) ** 2 +
+        Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLng/2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(s));
+    }
+
+    function ensureMap() {
+      if (STATE.gps.map) return;
+      const map = L.map('map', { zoomControl: false }).setView([35.0116, 135.7681], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap',
+        maxZoom: 19,
+      }).addTo(map);
+      STATE.gps.map = map;
+      STATE.gps.polyLayer = L.polyline([], { color: '#16a34a', weight: 4 }).addTo(map);
+    }
+
+    function updateMap(p) {
+      ensureMap();
+      if (!STATE.gps.marker) {
+        STATE.gps.marker = L.circleMarker(p, { radius: 6, color: '#16a34a', fillOpacity: 1 }).addTo(STATE.gps.map);
+        STATE.gps.map.setView(p, 15);
+      } else {
+        STATE.gps.marker.setLatLng(p);
+        STATE.gps.map.panTo(p);
+      }
+      STATE.gps.polyLayer.setLatLngs(STATE.gps.polyline);
+    }
+
+    function updateGpsStats() {
+      const km = STATE.gps.totalDistanceM / 1000;
+      const min = Math.floor((Date.now() - STATE.gps.startTs) / 60000);
+      const h = Math.floor(min / 60);
+      const m = min % 60;
+      const spd = (min > 0) ? (km / (min / 60)) : 0;
+      document.getElementById('gpsDist').textContent = km.toFixed(2);
+      document.getElementById('gpsTime').textContent =
+        (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+      document.getElementById('gpsSpd').textContent = spd.toFixed(1);
+    }
+
+    // ---- Boot ----
+    start();
+  </script>
+</body>
+</html>

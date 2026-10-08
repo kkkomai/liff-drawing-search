@@ -7,6 +7,7 @@ import os, subprocess, sys, uuid
 from datetime import datetime, timezone, timedelta
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
+from urllib.parse import unquote
 
 logger = logging.getLogger(__name__)
 PORT = int(os.environ.get("PORT", "10000"))
@@ -124,17 +125,113 @@ def resolve_bento_dir():
     return None
 
 
-def load_schedules():
+# The bike-log tab is served as a self-contained HTML page at /bike/. Local
+# development reads straight from bike/; the same folder is committed to the
+# repo so Render serves it without a build step.
+BIKE_SRC_CANDIDATES = [
+    BASE_DIR / "bike",
+]
+
+
+def resolve_bike_dir():
+    for cand in BIKE_SRC_CANDIDATES:
+        if (cand / "index.html").is_file():
+            return cand
+    return None
+
+
+# ---- Bike-log store ----
+# Mirrors the schedules Postgres-or-JSON switch above. When DATABASE_URL is
+# set, logs live in bike_db.py (Neon Postgres); otherwise the JSON file in
+# the working directory is the local-dev fallback. Render's free tier has
+# ephemeral disk, so without DATABASE_URL the data would vanish every 15
+# minutes of idle.
+BIKE_FILE = BASE_DIR / "bike_logs.json"
+
+
+def _load_bike_logs():
+    if USE_POSTGRES:
+        from bike_db import list_logs as _pg_bike_list  # type: ignore
+        return _pg_bike_list()
     try:
-        with open(SCHEDULES_FILE, "r", encoding="utf-8") as f:
+        with open(BIKE_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return []
 
 
-def save_schedules(schedules):
-    with open(SCHEDULES_FILE, "w", encoding="utf-8") as f:
-        json.dump(schedules, f, ensure_ascii=False, indent=2)
+def _save_bike_logs(logs):
+    if USE_POSTGRES:
+        from bike_db import insert_log as _pg_bike_insert  # type: ignore
+        # Caller is responsible for clearing; we only support append via POST.
+        raise NotImplementedError("use bike_db directly for inserts")
+    with open(BIKE_FILE, "w", encoding="utf-8") as f:
+        json.dump(logs, f, ensure_ascii=False, indent=2)
+
+
+def _append_bike_log(entry: dict) -> None:
+    if USE_POSTGRES:
+        from bike_db import insert_log as _pg_bike_insert  # type: ignore
+        _pg_bike_insert(entry)
+        return
+    logs = _load_bike_logs()
+    logs.append(entry)
+    _save_bike_logs(logs)
+
+
+def _update_bike_log(log_id: str, updates: dict):
+    if USE_POSTGRES:
+        from bike_db import update_log as _pg_bike_update  # type: ignore
+        return _pg_bike_update(log_id, updates)
+    logs = _load_bike_logs()
+    for s in logs:
+        if s.get("id") == log_id:
+            for key, v in updates.items():
+                s[key] = v
+            _save_bike_logs(logs)
+            return s
+    return None
+
+
+def _delete_bike_log(log_id: str) -> bool:
+    if USE_POSTGRES:
+        from bike_db import delete_log as _pg_bike_delete  # type: ignore
+        return _pg_bike_delete(log_id)
+    logs = _load_bike_logs()
+    new = [s for s in logs if s.get("id") != log_id]
+    if len(new) == len(logs):
+        return False
+    _save_bike_logs(new)
+    return True
+
+
+def _serve_static_from(self, root_dir, rel_path: str, prefix: str):
+    """Serve a file from ``root_dir`` under the given URL prefix.
+
+    Used for both ``/bento/...`` and ``/bike/...``. Returns True when the
+    request matched, False otherwise (so the caller can fall through).
+    Path traversal is blocked with a relative_to check, exactly as the
+    bento handler does.
+    """
+    if not rel_path:
+        rel_path = "index.html"
+    target = (root_dir / rel_path).resolve()
+    try:
+        target.relative_to(root_dir.resolve())
+    except ValueError:
+        self.send_json(403, {"error": "forbidden"})
+        return True
+    if not target.is_file():
+        self.send_json(404, {"error": "not_found"})
+        return True
+    ctype = self.guess_type(str(target))
+    body = target.read_bytes()
+    self.send_response(200)
+    self.send_header("Content-Type", ctype)
+    self.send_header("Content-Length", str(len(body)))
+    self.end_headers()
+    self.wfile.write(body)
+    return True
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -159,30 +256,34 @@ class Handler(SimpleHTTPRequestHandler):
                     "message": "bento app not found on this server",
                 })
                 return
-            rel = self.path[len("/bento/"):].split("?")[0]
-            if not rel:
-                rel = "index.html"
-            target = (bento_dir / rel).resolve()
-            # Path traversal guard: never serve anything outside bento_dir.
-            try:
-                target.relative_to(bento_dir.resolve())
-            except ValueError:
-                self.send_json(403, {"error": "forbidden"})
+            rel = unquote(self.path[len("/bento/"):]).split("?")[0]
+            _serve_static_from(self, bento_dir, rel, "/bento/")
+            return
+        if self.path.startswith("/bike/"):
+            bike_dir = resolve_bike_dir()
+            if bike_dir is None:
+                self.send_json(503, {
+                    "error": "bike_not_deployed",
+                    "message": "bike tab not found on this server",
+                })
                 return
-            if not target.is_file():
-                self.send_json(404, {"error": "not_found"})
-                return
-            ctype = self.guess_type(str(target))
-            body = target.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            rel = unquote(self.path[len("/bike/"):]).split("?")[0]
+            _serve_static_from(self, bike_dir, rel, "/bike/")
             return
         if self.path == "/schedules":
             schedules = load_schedules()
             self.send_json(200, {"schedules": schedules})
+            return
+        if self.path == "/bike-logs":
+            self.send_json(200, {"logs": _load_bike_logs()})
+            return
+        if self.path.startswith("/bike-logs/summary/"):
+            year_month = unquote(self.path.split("/")[-1])
+            if not USE_POSTGRES:
+                self.send_json(503, {"error": "summary requires Postgres"})
+                return
+            from bike_db import monthly_summary  # type: ignore
+            self.send_json(200, monthly_summary(year_month))
             return
         # For HTML/CSS/JS/SDK static files - use parent handler
         SimpleHTTPRequestHandler.do_GET(self)
@@ -194,6 +295,13 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json(200, {"success": True, "message": "Schedule deleted"})
             else:
                 self.send_json(404, {"error": "Schedule not found"})
+            return
+        if self.path.startswith("/bike-logs/"):
+            lid = self.path.split("/")[-1]
+            if _delete_bike_log(lid):
+                self.send_json(200, {"success": True, "message": "Bike log deleted"})
+            else:
+                self.send_json(404, {"error": "Bike log not found"})
             return
         self.send_json(404, {"error": "not found"})
 
@@ -212,6 +320,21 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json(200, {"success": True, "schedule": updated})
             else:
                 self.send_json(404, {"error": "Schedule not found"})
+            return
+        if self.path.startswith("/bike-logs/"):
+            lid = self.path.split("/")[-1]
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length)
+            try:
+                data = json.loads(raw.decode("utf-8"))
+            except json.JSONDecodeError:
+                self.send_json(400, {"error": "invalid JSON"})
+                return
+            updated = _update_bike_log(lid, data)
+            if updated is not None:
+                self.send_json(200, {"success": True, "log": updated})
+            else:
+                self.send_json(404, {"error": "Bike log not found"})
             return
         self.send_json(404, {"error": "not found"})
 
@@ -242,6 +365,64 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json(201, {"success": True, "schedule": new})
             except Exception as exc:
                 logger.error("POST /create error: %s", exc)
+                self.send_json(500, {"error": str(exc)})
+            return
+        if self.path.split("?")[0] == "/bike-logs":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                raw = b""
+                while len(raw) < length:
+                    chunk = self.rfile.read(min(length - len(raw), 8192))
+                    if not chunk:
+                        break
+                    raw += chunk
+                text = raw.decode("utf-8", errors="replace")
+                try:
+                    data = json.loads(text)
+                except json.JSONDecodeError:
+                    self.send_json(400, {"error": "invalid JSON"})
+                    return
+                date = str(data.get("date", "")).strip()
+                if not date:
+                    self.send_json(400, {"error": "date is required"})
+                    return
+                # Coerce numeric fields. Frontend may send strings.
+                def _f(v, default=0.0):
+                    try:
+                        return float(v)
+                    except (TypeError, ValueError):
+                        return default
+
+                def _i(v, default=0):
+                    try:
+                        return int(float(v))
+                    except (TypeError, ValueError):
+                        return default
+
+                distance_km = _f(data.get("distance_km", 0), 0.0)
+                duration_min = _i(data.get("duration_min", 0), 0)
+                avg_speed_kmh = _f(
+                    data.get("avg_speed_kmh", 0.0),
+                    (distance_km / (duration_min / 60.0)) if duration_min else 0.0,
+                )
+                polyline = data.get("polyline", "[]")
+                if isinstance(polyline, list):
+                    polyline = json.dumps(polyline, ensure_ascii=False)
+                entry = {
+                    "id": str(uuid.uuid4()),
+                    "date": date,
+                    "distance_km": round(distance_km, 2),
+                    "duration_min": int(duration_min),
+                    "avg_speed_kmh": round(avg_speed_kmh, 2),
+                    "title": str(data.get("title", "")).strip(),
+                    "note": str(data.get("note", "")).strip(),
+                    "polyline": str(polyline),
+                    "created": datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%dT%H:%M:%S+0900"),
+                }
+                _append_bike_log(entry)
+                self.send_json(201, {"success": True, "log": entry})
+            except Exception as exc:
+                logger.error("POST /bike-logs error: %s", exc)
                 self.send_json(500, {"error": str(exc)})
             return
         self.send_json(404, {"error": "not found"})

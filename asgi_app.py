@@ -89,6 +89,13 @@ if USE_POSTGRES:
         update_schedule as _pg_update,
         delete_schedule as _pg_delete,
     )
+    from bike_db import (  # type: ignore
+        list_logs as _pg_bike_list,
+        insert_log as _pg_bike_insert,
+        update_log as _pg_bike_update,
+        delete_log as _pg_bike_delete,
+        monthly_summary as _pg_bike_summary,
+    )
 
     def load_schedules() -> list[dict]:
         return _pg_list()
@@ -125,6 +132,21 @@ if USE_POSTGRES:
 
     def _delete_schedule(schedule_id: str) -> bool:
         return _pg_delete(schedule_id)
+
+    def _append_bike_log(entry: dict) -> None:
+        _pg_bike_insert(entry)
+
+    def _update_bike_log(log_id: str, updates: dict) -> dict | None:
+        return _pg_bike_update(log_id, updates)
+
+    def _delete_bike_log(log_id: str) -> bool:
+        return _pg_bike_delete(log_id)
+
+    def load_bike_logs() -> list[dict]:
+        return _pg_bike_list()
+
+    def get_bike_summary(year_month: str) -> dict:
+        return _pg_bike_summary(year_month)
 
     logger.info("Schedules store: Postgres (%s...)", DATABASE_URL[:32])
 else:
@@ -164,6 +186,58 @@ else:
             return False
         save_schedules(kept)
         return True
+
+    BIKE_FILE = BASE_DIR / "bike_logs.json"
+
+    def load_bike_logs() -> list[dict]:
+        try:
+            with BIKE_FILE.open("r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
+
+    def save_bike_logs(rows: list[dict]) -> None:
+        with BIKE_FILE.open("w", encoding="utf-8") as fh:
+            json.dump(rows, fh, ensure_ascii=False, indent=2)
+
+    def _append_bike_log(entry: dict) -> None:
+        rows = load_bike_logs()
+        rows.append(entry)
+        save_bike_logs(rows)
+
+    def _update_bike_log(log_id: str, updates: dict) -> dict | None:
+        rows = load_bike_logs()
+        for idx, row in enumerate(rows):
+            if row.get("id") == log_id:
+                updated = dict(row)
+                for key, v in updates.items():
+                    updated[key] = v
+                rows[idx] = updated
+                save_bike_logs(rows)
+                return updated
+        return None
+
+    def _delete_bike_log(log_id: str) -> bool:
+        rows = load_bike_logs()
+        kept = [r for r in rows if r.get("id") != log_id]
+        if len(kept) == len(rows):
+            return False
+        save_bike_logs(kept)
+        return True
+
+    def get_bike_summary(year_month: str) -> dict:
+        # Local JSON: compute the same shape on the fly.
+        rows = [r for r in load_bike_logs() if str(r.get("date", "")).startswith(year_month)]
+        total_km = sum(float(r.get("distance_km", 0) or 0) for r in rows)
+        total_min = sum(int(r.get("duration_min", 0) or 0) for r in rows)
+        avg = (total_km / (total_min / 60.0)) if total_min else 0.0
+        return {
+            "year_month": year_month,
+            "count": len(rows),
+            "total_km": round(total_km, 2),
+            "total_min": total_min,
+            "avg_speed_kmh": round(avg, 2),
+        }
 
     logger.info("Schedules store: JSON file (%s)", SCHEDULES_FILE)
 
@@ -265,6 +339,88 @@ async def update_schedule(schedule_id: str, payload: dict = Body(...)) -> JSONRe
 async def delete_schedule(schedule_id: str) -> JSONResponse:
     if _delete_schedule(schedule_id):
         return JSONResponse(content={"success": True, "message": "Schedule deleted"})
+    return JSONResponse(status_code=404, content={"success": False, "error": "not found"})
+
+
+# --------------------------------------------------------------------------- #
+# Bike-log API (mirrors /schedules). DB-backed when DATABASE_URL is set, else
+# the JSON file at BASE_DIR/bike_logs.json — same Postgres-vs-JSON switch as
+# the schedules store. Render's free tier has ephemeral disk, so the JSON
+# fallback is for local dev only.
+# --------------------------------------------------------------------------- #
+
+
+def _bike_log_from_payload(data: dict) -> dict:
+    date = str(data.get("date", "")).strip()
+    if not date:
+        raise HTTPException(status_code=400, detail="date is required")
+
+    def _f(v, default=0.0):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    def _i(v, default=0):
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return default
+
+    distance_km = _f(data.get("distance_km", 0), 0.0)
+    duration_min = _i(data.get("duration_min", 0), 0)
+    explicit_speed = data.get("avg_speed_kmh")
+    avg_speed_kmh = (
+        _f(explicit_speed, 0.0) if explicit_speed not in (None, "")
+        else (distance_km / (duration_min / 60.0) if duration_min else 0.0)
+    )
+    polyline = data.get("polyline", "[]")
+    if isinstance(polyline, list):
+        polyline = json.dumps(polyline, ensure_ascii=False)
+    return {
+        "id": str(uuid.uuid4()),
+        "date": date,
+        "distance_km": round(distance_km, 2),
+        "duration_min": int(duration_min),
+        "avg_speed_kmh": round(float(avg_speed_kmh), 2),
+        "title": str(data.get("title", "")).strip(),
+        "note": str(data.get("note", "")).strip(),
+        "polyline": str(polyline),
+        "created": datetime.now(JST).strftime("%Y-%m-%dT%H:%M:%S+0900"),
+    }
+
+
+@app.get("/bike-logs")
+def get_bike_logs() -> dict:
+    return {"logs": load_bike_logs()}
+
+
+@app.get("/bike-logs/summary/{year_month}")
+def get_bike_logs_summary(year_month: str) -> dict:
+    if not year_month or len(year_month) != 7 or year_month[4] != "-":
+        raise HTTPException(status_code=400, detail="expected YYYY-MM")
+    return get_bike_summary(year_month)
+
+
+@app.post("/bike-logs")
+async def create_bike_log(payload: dict = Body(...)) -> JSONResponse:
+    entry = _bike_log_from_payload(payload)
+    _append_bike_log(entry)
+    return JSONResponse(status_code=201, content={"success": True, "log": entry})
+
+
+@app.put("/bike-logs/{log_id}")
+async def update_bike_log(log_id: str, payload: dict = Body(...)) -> JSONResponse:
+    updated = _update_bike_log(log_id, payload)
+    if not updated:
+        return JSONResponse(status_code=404, content={"success": False, "error": "not found"})
+    return JSONResponse(content={"success": True, "log": updated})
+
+
+@app.delete("/bike-logs/{log_id}")
+async def delete_bike_log(log_id: str) -> JSONResponse:
+    if _delete_bike_log(log_id):
+        return JSONResponse(content={"success": True, "message": "Bike log deleted"})
     return JSONResponse(status_code=404, content={"success": False, "error": "not found"})
 
 
@@ -381,6 +537,9 @@ app.add_middleware(
 # missing file, so serve the whole directory instead.
 if (BASE_DIR / "bento").is_dir():
     app.mount("/bento", StaticFiles(directory=str(BASE_DIR / "bento"), html=True), name="bento")
+
+if (BASE_DIR / "bike").is_dir():
+    app.mount("/bike", StaticFiles(directory=str(BASE_DIR / "bike"), html=True), name="bike")
 
 _NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate"}
 
