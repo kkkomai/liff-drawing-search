@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261008bike</title>
-  <script>window.__v="20261008bike";</script>
+  <title>申請フォーム - v20261008route</title>
+  <script>window.__v="20261008route";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261008bike)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261008route)</span></h1>
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -96,6 +96,7 @@
       <button id="tab-paid-btn" class="tab" data-tab="paid" ontouchstart="switchTab('paid')" onclick="switchTab('paid')">有給申請</button>
       <button id="tab-bento-btn" class="tab" data-tab="bento" ontouchstart="switchTab('bento')" onclick="switchTab('bento')">お弁当注文</button>
       <button id="tab-bike-btn" class="tab" data-tab="bike" ontouchstart="switchTab('bike')" onclick="switchTab('bike')">自転車ログ</button>
+      <button id="tab-route-btn" class="tab" data-tab="route" ontouchstart="switchTab('route')" onclick="switchTab('route')">ルート詳細</button>
     </div>
 
   <div class="tab-content active" id="tab-overtime">
@@ -216,6 +217,15 @@
             data-src="bike/index.html?embedded=1"></iframe>
   </div>
 
+  <div class="tab-content" id="tab-route">
+    <!-- Route-detail tab. Read-only map of every saved bike log's polyline,
+         with a list grouped by month. Same postMessage credential handoff
+         as the bike tab because liff.init can only run in the host. -->
+    <iframe id="route-frame" title="ルート詳細"
+            style="width:100%;height:760px;min-height:760px;border:0;display:block;background:#f5f6f8;"
+            data-src="route/index.html?embedded=1"></iframe>
+  </div>
+
   <div class="editor-overlay" id="editor-overlay" style="display:none !important;">
     <div class="editor-header">
       <span>画像編集（4:3 / 3:4）</span>
@@ -269,6 +279,7 @@
       console.log('switchTab called: ' + tabName);
       if (tabName === 'bento') ensureBentoFrame();
       if (tabName === 'bike') ensureBikeFrame();
+      if (tabName === 'route') ensureRouteFrame();
     }
 
     // === BENTO TAB (iframe + postMessage credential handoff) ===
@@ -453,7 +464,76 @@
         sendBikeCredentials();
         return;
       }
+      if (ev.data.type === 'route-ready') {
+        log('route iframe requested credentials');
+        sendRouteCredentials();
+        return;
+      }
     });
+
+    // === ROUTE TAB (read-only map of saved polylines) ===
+    var routeRetryTimer = null;
+    var ROUTE_MAX_RETRIES = 200;
+    var routeRetries = 0;
+
+    function ensureRouteFrame() {
+      var frame = document.getElementById('route-frame');
+      if (!frame) return;
+      if (frame.dataset.loaded !== '1') {
+        // route lives on the same origin as the host (this server serves
+        // /route/), so no apiBase override is needed; the child reads its
+        // own location.
+        frame.src = frame.dataset.src;
+        frame.dataset.loaded = '1';
+        log('ensureRouteFrame: loading ' + frame.src);
+      }
+      sendRouteCredentials();
+    }
+
+    function sendRouteCredentials() {
+      var frame = document.getElementById('route-frame');
+      if (!frame || !frame.contentWindow) return;
+      var cred = buildLiffCredentials();
+      if (!cred.lineUserId) {
+        diag('3c. ルート詳細', 'userId 未取得（リトライ中）');
+        scheduleRouteCredentials();
+        return;
+      }
+      var payload = {
+        type: 'route-credentials',
+        lineUserId: cred.lineUserId,
+        idToken: cred.idToken,
+        apiBase: window.location.origin,
+      };
+      frame.contentWindow.postMessage(payload, window.location.origin);
+      log('sendRouteCredentials: sent to route iframe');
+    }
+
+    function scheduleRouteCredentials() {
+      if (routeRetryTimer) return;
+      if (routeRetries >= ROUTE_MAX_RETRIES) {
+        log('sendRouteCredentials: giving up after ' + routeRetries + ' retries', true);
+        try {
+          var stuck = document.getElementById('route-frame');
+          if (stuck && stuck.contentWindow) {
+            stuck.contentWindow.postMessage({
+              type: 'route-auth-error',
+              message: whyLiffUnavailable(),
+            }, window.location.origin);
+          }
+        } catch (e) {
+          log('sendRouteCredentials: could not deliver auth error: ' + e.message, true);
+        }
+        return;
+      }
+      routeRetries++;
+      routeRetryTimer = setTimeout(function () {
+        routeRetryTimer = null;
+        sendRouteCredentials();
+      }, 300);
+    }
+    function resetRouteCredentials() { routeRetries = 0; }
+
 
     // === BIKE TAB (same pattern as bento) ===
     var bikeRetryTimer = null;

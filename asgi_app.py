@@ -549,6 +549,9 @@ if (BASE_DIR / "bento").is_dir():
 if (BASE_DIR / "bike").is_dir():
     app.mount("/bike", StaticFiles(directory=str(BASE_DIR / "bike"), html=True), name="bike")
 
+if (BASE_DIR / "route").is_dir():
+    app.mount("/route", StaticFiles(directory=str(BASE_DIR / "route"), html=True), name="route")
+
 _NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate"}
 
 

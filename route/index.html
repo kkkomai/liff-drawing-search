@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#16a34a" />
+  <title>ルート詳細</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="" />
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --fg: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --accent: #16a34a;
+      --accent-soft: #dcfce7;
+      --danger: #dc2626;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    header {
+      background: var(--accent);
+      color: #fff;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    header h1 { margin: 0; font-size: 15px; font-weight: 600; }
+    header .badge { font-size: 11px; opacity: 0.85; }
+    header .btn-reset {
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.4);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    header .btn-reset:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #map {
+      width: 100%;
+      height: 50vh;
+      min-height: 320px;
+      background: #e2e8f0;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      padding: 10px 12px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+    }
+    .stat { text-align: center; }
+    .stat .v { font-size: 18px; font-weight: 700; color: var(--fg); }
+    .stat .u { font-size: 10px; color: var(--muted); }
+    .stat.empty .v { color: var(--muted); font-weight: 400; font-size: 13px; }
+
+    .list-wrap { padding: 8px 10px 80px; }
+    .month-label {
+      font-size: 12px;
+      color: var(--muted);
+      padding: 10px 4px 4px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+    .item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: border-color 0.1s, background 0.1s;
+    }
+    .item:hover { border-color: var(--accent); }
+    .item.selected { border-color: var(--accent); background: var(--accent-soft); }
+    .item .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .item .date { font-weight: 600; font-size: 13px; }
+    .item .km { color: var(--accent); font-weight: 700; font-size: 14px; }
+    .item .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .item .title { font-size: 13px; margin-top: 4px; }
+    .item .note { font-size: 12px; color: var(--muted); margin-top: 2px;
+                  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item .no-gps { font-size: 11px; color: var(--danger); margin-top: 2px; }
+
+    .empty {
+      color: var(--muted);
+      text-align: center;
+      padding: 24px 12px;
+      font-size: 13px;
+    }
+
+    #authWait {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999;
+      padding: 20px; text-align: center;
+    }
+    #authWait .box { max-width: 320px; }
+    #authWait.error h2 { color: var(--danger); }
+
+    .toast {
+      position: fixed;
+      left: 50%; bottom: 16px;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.92);
+      color: #f8fafc;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 9998;
+      max-width: 90%;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { background: #b91c1c; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🗺️ ルート詳細</h1>
+    <span class="badge" id="apiStatus">接続待機</span>
+    <button class="btn-reset" id="resetBtn" disabled>全件表示</button>
+  </header>
+
+  <div class="stats" id="stats">
+    <div class="stat empty"><div class="v">-</div><div class="u">距離 (km)</div></div>
+    <div class="stat empty"><div class="v">-</div><div class="u">時間</div></div>
+    <div class="stat empty"><div class="v">-</div><div class="u">平均 (km/h)</div></div>
+    <div class="stat empty"><div class="v">-</div><div class="u">記録数</div></div>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="list-wrap" id="listWrap">
+    <div class="empty">読み込み中...</div>
+  </div>
+
+  <div id="authWait">
+    <div class="box">
+      <h2>認証待ち</h2>
+      <div class="empty">ホストアプリからの認証情報を待機しています...</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+  <script>
+    // ---- postMessage contract with the host (index.html) ----
+    // Host -> child: { type: 'route-credentials', apiBase, lineUserId?, idToken? }
+    // Child -> host: { type: 'route-ready' }
+    // Host -> child: { type: 'route-auth-error', message: '...' }
+    const STATE = {
+      apiBase: '',
+      idToken: '',
+      lineUserId: '',
+      authed: false,
+      logs: [],
+      selectedId: null,
+      map: null,
+      // All routes drawn faded when nothing is selected.
+      allLayers: new Map(),  // id -> L.Polyline
+      selectedLayer: null,   // currently highlighted polyline
+      startEndMarkers: null, // [startMarker, endMarker] of selected route
+    };
+
+    function setStatus(text, ok) {
+      const el = document.getElementById('apiStatus');
+      el.textContent = text;
+      el.style.color = ok ? '#bbf7d0' : '#fecaca';
+    }
+    function showToast(msg, isError) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show' + (isError ? ' error' : '');
+      setTimeout(() => { el.className = 'toast' + (isError ? ' error' : ''); }, 2400);
+    }
+    function showAuthFailure(msg) {
+      const w = document.getElementById('authWait');
+      w.classList.add('error');
+      w.innerHTML = '<div class="box"><h2>認証エラー</h2>' +
+        '<div class="empty" style="color:var(--danger);">' + msg + '</div></div>';
+      setStatus('未接続', false);
+    }
+    function formatDuration(min) {
+      if (!min) return '0m';
+      const h = Math.floor(min / 60);
+      const m = min % 60;
+      return (h ? h + 'h' : '') + (m ? (h ? ' ' : '') + m + 'm' : '');
+    }
+    function esc(s) {
+      return String(s || '').replace(/[<>&"']/g, c => ({
+        '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'
+      })[c]);
+    }
+
+    // ---- postMessage handshake ----
+    function start() {
+      const params = new URLSearchParams(location.search);
+      if (params.get('embedded') !== '1') {
+        // Standalone / mock mode (open route/index.html directly).
+        STATE.apiBase = params.get('apiBase') || '';
+        STATE.idToken = params.get('mockToken') || 'mock';
+        STATE.lineUserId = params.get('mockUser') || 'demo-user';
+        STATE.authed = true;
+        onAuthed();
+        return;
+      }
+      setStatus('認証待ち', false);
+      // Ask host for credentials. Host also re-posts on route-ready, so this
+      // handles the case where the iframe is mounted before the host boots.
+      let attempts = 0;
+      const ask = () => {
+        attempts += 1;
+        try { window.parent.postMessage({ type: 'route-ready' }, '*'); }
+        catch (e) { /* parent may not be ready yet */ }
+        if (attempts < 60) setTimeout(ask, 500);
+        else showAuthFailure('ホストからの認証情報を取得できませんでした。タブを開き直してください。');
+      };
+      ask();
+    }
+
+    window.addEventListener('message', (ev) => {
+      const d = ev.data || {};
+      if (d.type === 'route-credentials') {
+        if (!d.apiBase) { showAuthFailure('APIベースURLが指定されていません。'); return; }
+        STATE.apiBase = d.apiBase;
+        STATE.idToken = d.idToken || '';
+        STATE.lineUserId = d.lineUserId || '';
+        STATE.authed = true;
+        onAuthed();
+      } else if (d.type === 'route-auth-error') {
+        showAuthFailure(d.message || '認証に失敗しました。');
+      }
+    });
+
+    function onAuthed() {
+      document.getElementById('authWait').style.display = 'none';
+      setStatus('接続済み', true);
+      loadLogs();
+    }
+
+    // ---- API ----
+    function authHeaders() {
+      const h = { 'Content-Type': 'application/json' };
+      if (STATE.idToken) h['Authorization'] = 'Bearer ' + STATE.idToken;
+      return h;
+    }
+    async function loadLogs(retry) {
+      retry = retry || 0;
+      try {
+        const r = await fetch(STATE.apiBase + '/bike-logs', {
+          headers: authHeaders(),
+          cache: 'no-store',
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        // Normalise polyline: stored as JSON string; some legacy rows may
+        // already be a list. Accept both.
+        STATE.logs = (j.logs || []).map(l => {
+          let pl = l.polyline;
+          if (typeof pl === 'string') {
+            try { pl = JSON.parse(pl); } catch (e) { pl = []; }
+          }
+          if (!Array.isArray(pl)) pl = [];
+          return Object.assign({}, l, { polyline: pl });
+        });
+        renderList();
+        ensureMap();
+        drawAllRoutes();
+        updateSummary();
+      } catch (e) {
+        if (retry < 3) {
+          await new Promise(res => setTimeout(res, 1000 * Math.pow(2, retry)));
+          return loadLogs(retry + 1);
+        }
+        document.getElementById('listWrap').innerHTML =
+          '<div class="empty">記録の読み込みに失敗しました。<br>' + esc(e.message) + '</div>';
+        showToast('読み込み失敗: ' + e.message, true);
+      }
+    }
+
+    // ---- Map ----
+    function ensureMap() {
+      if (STATE.map) return;
+      const map = L.map('map', { zoomControl: true }).setView([35.0116, 135.7681], 11);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap',
+        maxZoom: 19,
+      }).addTo(map);
+      STATE.map = map;
+    }
+
+    function drawAllRoutes() {
+      if (!STATE.map) return;
+      // Clear previous all-layer polylines.
+      STATE.allLayers.forEach(layer => STATE.map.removeLayer(layer));
+      STATE.allLayers.clear();
+
+      const allBounds = [];
+      STATE.logs.forEach(log => {
+        if (!log.polyline || log.polyline.length < 2) return;
+        const layer = L.polyline(log.polyline, {
+          color: '#94a3b8',
+          weight: 2,
+          opacity: 0.55,
+        }).addTo(STATE.map);
+        STATE.allLayers.set(log.id, layer);
+        log.polyline.forEach(p => allBounds.push(p));
+      });
+      if (allBounds.length >= 2 && !STATE.selectedId) {
+        STATE.map.fitBounds(allBounds, { padding: [24, 24] });
+      }
+    }
+
+    function selectRoute(logId) {
+      const log = STATE.logs.find(l => l.id === logId);
+      if (!log) return;
+      STATE.selectedId = logId;
+
+      // Dim all layers except selected.
+      STATE.allLayers.forEach((layer, id) => {
+        if (id === logId) {
+          layer.setStyle({ color: '#16a34a', weight: 5, opacity: 0.95 });
+        } else {
+          layer.setStyle({ color: '#cbd5e1', weight: 1, opacity: 0.4 });
+        }
+      });
+
+      // Remove old start/end markers.
+      if (STATE.startEndMarkers) {
+        STATE.startEndMarkers.forEach(m => STATE.map.removeLayer(m));
+        STATE.startEndMarkers = null;
+      }
+
+      if (log.polyline && log.polyline.length >= 2) {
+        const start = log.polyline[0];
+        const end = log.polyline[log.polyline.length - 1];
+        STATE.startEndMarkers = [
+          L.circleMarker(start, {
+            radius: 7, color: '#16a34a', fillColor: '#fff',
+            fillOpacity: 1, weight: 3,
+          }).addTo(STATE.map).bindTooltip('スタート', { permanent: false }),
+          L.circleMarker(end, {
+            radius: 7, color: '#dc2626', fillColor: '#fff',
+            fillOpacity: 1, weight: 3,
+          }).addTo(STATE.map).bindTooltip('ゴール', { permanent: false }),
+        ];
+        STATE.map.fitBounds(log.polyline, { padding: [40, 40] });
+      } else {
+        // No GPS data — just show a toast and keep current view.
+        showToast('この記録にはGPSデータがありません');
+      }
+
+      // Highlight selected list item.
+      document.querySelectorAll('.item').forEach(el => {
+        el.classList.toggle('selected', el.dataset.id === logId);
+      });
+      const target = document.querySelector('.item[data-id="' + cssEsc(logId) + '"]');
+      if (target) target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+      // Update summary card to selected route's stats.
+      updateSummary(log);
+      document.getElementById('resetBtn').disabled = false;
+    }
+
+    function cssEsc(s) {
+      if (window.CSS && CSS.escape) return CSS.escape(s);
+      return String(s).replace(/[^a-zA-Z0-9_-]/g, c => '\\' + c);
+    }
+
+    function resetView() {
+      STATE.selectedId = null;
+      // Restore all layers to faded-but-visible style.
+      STATE.allLayers.forEach((layer) => {
+        layer.setStyle({ color: '#94a3b8', weight: 2, opacity: 0.55 });
+      });
+      if (STATE.startEndMarkers) {
+        STATE.startEndMarkers.forEach(m => STATE.map.removeLayer(m));
+        STATE.startEndMarkers = null;
+      }
+      document.querySelectorAll('.item.selected').forEach(el => el.classList.remove('selected'));
+      const allBounds = [];
+      STATE.allLayers.forEach(layer => {
+        if (layer.getLatLngs) {
+          const ll = layer.getLatLngs();
+          ll.forEach(p => allBounds.push(p));
+        }
+      });
+      if (allBounds.length >= 2) {
+        STATE.map.fitBounds(allBounds, { padding: [24, 24] });
+      }
+      updateSummary();
+      document.getElementById('resetBtn').disabled = true;
+    }
+
+    // ---- List ----
+    function renderList() {
+      const wrap = document.getElementById('listWrap');
+      if (!STATE.logs.length) {
+        wrap.innerHTML = '<div class="empty">まだ記録がありません。<br>「自転車ログ」タブから追加してください。</div>';
+        return;
+      }
+      // Group by YYYY-MM, newest month first.
+      const groups = new Map();
+      STATE.logs.forEach(l => {
+        const ym = (l.date || '').slice(0, 7);
+        if (!groups.has(ym)) groups.set(ym, []);
+        groups.get(ym).push(l);
+      });
+      const ymKeys = Array.from(groups.keys()).sort().reverse();
+      let html = '';
+      ymKeys.forEach(ym => {
+        const items = groups.get(ym).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        html += '<div class="month-label">' + esc(ym) + '</div>';
+        items.forEach(l => {
+          const hasGps = l.polyline && l.polyline.length >= 2;
+          html += '<div class="item" data-id="' + esc(l.id) + '">' +
+            '<div class="top">' +
+              '<span class="date">' + esc(l.date || '(日付なし)') + '</span>' +
+              '<span class="km">' + (l.distance_km || 0).toFixed(1) + ' km</span>' +
+            '</div>' +
+            '<div class="meta">' + formatDuration(l.duration_min || 0) +
+              (l.avg_speed_kmh ? ' / 平均 ' + l.avg_speed_kmh.toFixed(1) + ' km/h' : '') +
+            '</div>' +
+            (l.title ? '<div class="title">' + esc(l.title) + '</div>' : '') +
+            (l.note ? '<div class="note">' + esc(l.note) + '</div>' : '') +
+            (hasGps ? '' : '<div class="no-gps">GPSデータなし（手入力）</div>') +
+          '</div>';
+        });
+      });
+      wrap.innerHTML = html;
+      wrap.querySelectorAll('.item').forEach(el => {
+        el.addEventListener('click', () => selectRoute(el.dataset.id));
+      });
+    }
+
+    // ---- Summary ----
+    function updateSummary(log) {
+      const stats = document.getElementById('stats');
+      if (log) {
+        const dur = formatDuration(log.duration_min || 0);
+        const km = (log.distance_km || 0).toFixed(1);
+        const spd = (log.avg_speed_kmh || 0).toFixed(1);
+        stats.innerHTML =
+          '<div class="stat"><div class="v">' + km + '</div><div class="u">距離 (km)</div></div>' +
+          '<div class="stat"><div class="v">' + esc(dur) + '</div><div class="u">時間</div></div>' +
+          '<div class="stat"><div class="v">' + spd + '</div><div class="u">平均 (km/h)</div></div>' +
+          '<div class="stat empty"><div class="v">1</div><div class="u">選択中</div></div>';
+      } else {
+        // Aggregate across all logs.
+        const totalKm = STATE.logs.reduce((s, l) => s + (l.distance_km || 0), 0);
+        const totalMin = STATE.logs.reduce((s, l) => s + (l.duration_min || 0), 0);
+        const withGps = STATE.logs.filter(l => l.polyline && l.polyline.length >= 2).length;
+        const avg = totalMin > 0 ? (totalKm / (totalMin / 60)) : 0;
+        stats.innerHTML =
+          '<div class="stat"><div class="v">' + totalKm.toFixed(1) + '</div><div class="u">合計 (km)</div></div>' +
+          '<div class="stat"><div class="v">' + formatDuration(totalMin) + '</div><div class="u">合計時間</div></div>' +
+          '<div class="stat"><div class="v">' + avg.toFixed(1) + '</div><div class="u">平均 (km/h)</div></div>' +
+          '<div class="stat"><div class="v">' + STATE.logs.length +
+            '<span style="font-size:11px;color:var(--muted);"> (GPS ' + withGps + ')</span></div>' +
+          '<div class="u">記録数</div></div>';
+      }
+    }
+
+    // ---- Boot ----
+    document.getElementById('resetBtn').addEventListener('click', resetView);
+    start();
+  </script>
+</body>
+</html>
