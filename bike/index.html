@@ -255,7 +255,6 @@
       logs: [],
       gps: {
         active: false,
-        watchId: null,
         points: [],
         polyline: [],         // [[lat,lng], ...]
         startTs: 0,
@@ -264,7 +263,8 @@
         map: null,
         marker: null,
         polyLayer: null,
-        timer: null,
+        timer: null,            // GPS sample interval timer (3 minutes)
+        displayTimer: null,     // UI stat refresh (1 second)
       },
     };
 
@@ -504,6 +504,12 @@
       }
     });
 
+    // GPS sampling interval. Three minutes is enough to draw a recognisable
+    // polyline on the route-detail map without burning battery on the bike.
+    // Lower this to taste, but anything below ~30s doubles data and storage
+    // for almost no visible improvement at city-block scale.
+    const GPS_SAMPLE_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+
     function startGps() {
       if (!navigator.geolocation) {
         showToast('このブラウザはGPSに対応していません', true);
@@ -514,28 +520,41 @@
       STATE.gps.totalDistanceM = 0;
       STATE.gps.lastPoint = null;
       STATE.gps.startTs = Date.now();
-      STATE.gps.watchId = navigator.geolocation.watchPosition(
-        onGpsPos, onGpsErr,
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
-      );
+      // Take the first sample immediately so the polyline is not empty until
+      // the first 3-minute tick fires, then keep sampling on a fixed interval.
+      // watchPosition would give us continuous updates but at the cost of
+      // battery and a polyline dense enough to dwarf the route-detail map.
+      sampleGps();
+      STATE.gps.timer = setInterval(sampleGps, GPS_SAMPLE_INTERVAL_MS);
       gpsBtn.textContent = '⏹ GPS記録 停止';
-      gpsStateEl.textContent = '計測中...';
+      gpsStateEl.textContent = '計測中...（3分ごとに記録）';
       document.getElementById('map').style.display = 'block';
       document.getElementById('gpsStats').style.display = 'grid';
       ensureMap();
-      STATE.gps.timer = setInterval(updateGpsStats, 1000);
+      // The stat row updates every second (for elapsed time) so the user has
+      // visual feedback while the GPS itself only fires every 3 minutes.
+      STATE.gps.displayTimer = setInterval(updateGpsStats, 1000);
     }
 
     function stopGps() {
       STATE.gps.active = false;
-      if (STATE.gps.watchId != null) {
-        navigator.geolocation.clearWatch(STATE.gps.watchId);
-        STATE.gps.watchId = null;
-      }
       if (STATE.gps.timer) { clearInterval(STATE.gps.timer); STATE.gps.timer = null; }
+      if (STATE.gps.displayTimer) { clearInterval(STATE.gps.displayTimer); STATE.gps.displayTimer = null; }
       gpsBtn.textContent = '📍 GPS記録 開始';
       gpsStateEl.textContent = STATE.gps.polyline.length + '点 / ' +
         (STATE.gps.totalDistanceM / 1000).toFixed(2) + ' km';
+    }
+
+    // One-shot getCurrentPosition. The page ignores subsequent samples when
+    // the user has already stopped the ride, so the in-flight call from the
+    // last 3-minute tick cannot append a phantom point after stopGps().
+    function sampleGps() {
+      if (!STATE.gps.active) return;
+      navigator.geolocation.getCurrentPosition(onGpsPos, onGpsErr, {
+        enableHighAccuracy: true,
+        maximumAge: GPS_SAMPLE_INTERVAL_MS,
+        timeout: 60000,
+      });
     }
 
     function onGpsPos(pos) {
@@ -548,6 +567,9 @@
       STATE.gps.lastPoint = p;
       STATE.gps.polyline.push(p);
       updateMap(p);
+      // Reflect the latest successful fix in the header so the user has
+      // visible confirmation between 3-minute ticks.
+      gpsStateEl.textContent = '計測中（' + STATE.gps.polyline.length + '点 / 次回 3分後）';
     }
 
     function onGpsErr(err) {
