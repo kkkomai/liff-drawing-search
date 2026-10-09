@@ -420,6 +420,25 @@ def get_runtime_config() -> dict:
             os.environ.get("ROUTE_MAP_DEFAULT_CENTER", "")
         ),
         "bike_page_title": os.environ.get("BIKE_PAGE_TITLE", "自転車ログ") or "自転車ログ",
+        # Route-detail map styling. All four accept a default if the env
+        # var is missing or empty, and any unparseable colour string falls
+        # back to the hard-coded value so a typo in the dashboard does
+        # not break the map.
+        "route_line_color_selected": (
+            os.environ.get("ROUTE_LINE_COLOR_SELECTED", "").strip() or "#16a34a"
+        ),
+        "route_line_color_default": (
+            os.environ.get("ROUTE_LINE_COLOR_DEFAULT", "").strip() or "#94a3b8"
+        ),
+        "route_line_weight_selected": _parse_int(
+            os.environ.get("ROUTE_LINE_WEIGHT_SELECTED", ""), 8
+        ),
+        "route_line_weight_default": _parse_int(
+            os.environ.get("ROUTE_LINE_WEIGHT_DEFAULT", ""), 3
+        ),
+        "route_marker_radius": _parse_int(
+            os.environ.get("ROUTE_MARKER_RADIUS", ""), 9
+        ),
     }
 
 

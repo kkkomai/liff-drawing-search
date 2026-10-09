@@ -362,6 +362,16 @@
       config: {
         gps_sample_interval_ms: 180_000,  // 3 minutes
         bike_page_title: '自転車ログ',
+        // Route-detail map styling. Same shape as the /api/runtime-config
+        // response so the page is functional before the fetch lands and
+        // overrides cleanly when the server's env vars are set.
+        route_map_default_zoom: 11,
+        route_map_default_center: [35.0116, 135.7681],
+        route_line_color_selected: '#16a34a',
+        route_line_color_default: '#94a3b8',
+        route_line_weight_selected: 8,
+        route_line_weight_default: 3,
+        route_marker_radius: 9,
       },
       logs: [],
       gps: {
@@ -486,6 +496,32 @@
             // cannot read env vars, so we patch it once after the fetch.
             const headerSpan = document.querySelector('header span');
             if (headerSpan) headerSpan.textContent = '🚴 ' + STATE.config.bike_page_title;
+          }
+          // Route-detail map styling. Apply the server-side values to
+          // STATE.config so the next drawAllRoutes() / selectRoute()
+          // call picks them up. We accept any positive number for the
+          // weights and any non-empty string for colours; the server
+          // already validates the colour string at request time.
+          if (typeof j.route_line_color_selected === 'string' && j.route_line_color_selected) {
+            STATE.config.route_line_color_selected = j.route_line_color_selected;
+          }
+          if (typeof j.route_line_color_default === 'string' && j.route_line_color_default) {
+            STATE.config.route_line_color_default = j.route_line_color_default;
+          }
+          if (Number.isFinite(j.route_line_weight_selected) && j.route_line_weight_selected > 0) {
+            STATE.config.route_line_weight_selected = j.route_line_weight_selected;
+          }
+          if (Number.isFinite(j.route_line_weight_default) && j.route_line_weight_default > 0) {
+            STATE.config.route_line_weight_default = j.route_line_weight_default;
+          }
+          if (Number.isFinite(j.route_marker_radius) && j.route_marker_radius > 0) {
+            STATE.config.route_marker_radius = j.route_marker_radius;
+          }
+          // Repaint the route map so the new colours and weights take
+          // effect immediately, without waiting for the next log save
+          // or tab switch.
+          if (typeof drawAllRoutes === 'function' && ROUTE && ROUTE.map) {
+            drawAllRoutes();
           }
         }
       } catch (e) {
@@ -842,6 +878,7 @@
         ROUTE.startEndMarkers.forEach(m => ROUTE.map.removeLayer(m));
         ROUTE.startEndMarkers = null;
       }
+      const cfg = STATE.config || {};
       const allBounds = [];
       STATE.logs.forEach(log => {
         if (!log.polyline || log.polyline.length < 2) return;
@@ -853,8 +890,8 @@
         // any obvious reason.
         var isSelected = (ROUTE.selectedId === log.id);
         const layer = L.polyline(log.polyline, {
-          color: isSelected ? '#16a34a' : '#94a3b8',
-          weight: isSelected ? 8 : 3,
+          color: isSelected ? cfg.route_line_color_selected : cfg.route_line_color_default,
+          weight: isSelected ? cfg.route_line_weight_selected : cfg.route_line_weight_default,
           opacity: isSelected ? 0.95 : (ROUTE.selectedId ? 0.4 : 0.55),
         }).addTo(ROUTE.map);
         ROUTE.allLayers.set(log.id, layer);
@@ -867,13 +904,14 @@
         if (sel && sel.polyline && sel.polyline.length >= 2) {
           const start = sel.polyline[0];
           const end = sel.polyline[sel.polyline.length - 1];
+          const r = cfg.route_marker_radius || 9;
           const startMarker = L.circleMarker(start, {
-            radius: 9, color: '#16a34a', fillColor: '#fff', fillOpacity: 1, weight: 4,
+            radius: r, color: cfg.route_line_color_selected, fillColor: '#fff', fillOpacity: 1, weight: 4,
           }).addTo(ROUTE.map);
           startMarker.addTo = () => startMarker;
           startMarker.bindTooltip = () => startMarker;
           const endMarker = L.circleMarker(end, {
-            radius: 9, color: '#dc2626', fillColor: '#fff', fillOpacity: 1, weight: 4,
+            radius: r, color: '#dc2626', fillColor: '#fff', fillOpacity: 1, weight: 4,
           }).addTo(ROUTE.map);
           endMarker.addTo = () => endMarker;
           endMarker.bindTooltip = () => endMarker;
@@ -896,11 +934,12 @@
       const log = STATE.logs.find(l => l.id === logId);
       if (!log) return;
       ROUTE.selectedId = logId;
+      const cfg = STATE.config || {};
       ROUTE.allLayers.forEach((layer, id) => {
         if (id === logId) {
-          layer.setStyle({ color: '#16a34a', weight: 8, opacity: 0.95 });
+          layer.setStyle({ color: cfg.route_line_color_selected, weight: cfg.route_line_weight_selected, opacity: 0.95 });
         } else {
-          layer.setStyle({ color: '#cbd5e1', weight: 2, opacity: 0.4 });
+          layer.setStyle({ color: cfg.route_line_color_default, weight: 2, opacity: 0.4 });
         }
       });
       if (ROUTE.startEndMarkers) {
@@ -910,13 +949,14 @@
       if (log.polyline && log.polyline.length >= 2) {
         const start = log.polyline[0];
         const end = log.polyline[log.polyline.length - 1];
+        const r = cfg.route_marker_radius || 9;
         const startMarker = L.circleMarker(start, {
-          radius: 9, color: '#16a34a', fillColor: '#fff', fillOpacity: 1, weight: 4,
+          radius: r, color: cfg.route_line_color_selected, fillColor: '#fff', fillOpacity: 1, weight: 4,
         }).addTo(ROUTE.map);
         startMarker.addTo = () => startMarker;
         startMarker.bindTooltip = () => startMarker;
         const endMarker = L.circleMarker(end, {
-          radius: 9, color: '#dc2626', fillColor: '#fff', fillOpacity: 1, weight: 4,
+          radius: r, color: '#dc2626', fillColor: '#fff', fillOpacity: 1, weight: 4,
         }).addTo(ROUTE.map);
         endMarker.addTo = () => endMarker;
         endMarker.bindTooltip = () => endMarker;
@@ -941,8 +981,9 @@
 
     function resetRouteView() {
       ROUTE.selectedId = null;
+      const cfg = STATE.config || {};
       ROUTE.allLayers.forEach((layer) => {
-        layer.setStyle({ color: '#94a3b8', weight: 3, opacity: 0.55 });
+        layer.setStyle({ color: cfg.route_line_color_default, weight: cfg.route_line_weight_default, opacity: 0.55 });
       });
       if (ROUTE.startEndMarkers) {
         ROUTE.startEndMarkers.forEach(m => ROUTE.map.removeLayer(m));
