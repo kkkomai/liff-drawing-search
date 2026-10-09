@@ -177,6 +177,10 @@
       apiBase: '',
       idToken: '',
       lineUserId: '',
+      // Server-side session token issued by the host's /api/auth/login
+      // against the employees table. Sent as `Authorization: Bearer ...` to
+      // gate /bike-logs access the same way the bento backend gates orders.
+      authToken: '',
       authed: false,
       // Map defaults — overridden by /api/config (env vars
       // ROUTE_MAP_DEFAULT_ZOOM and ROUTE_MAP_DEFAULT_CENTER) so the home
@@ -257,6 +261,7 @@
         STATE.apiBase = d.apiBase;
         STATE.idToken = d.idToken || '';
         STATE.lineUserId = d.lineUserId || '';
+        STATE.authToken = d.authToken || '';
         STATE.authed = true;
         onAuthed();
       } else if (d.type === 'route-auth-error') {
@@ -305,7 +310,7 @@
     // ---- API ----
     function authHeaders() {
       const h = { 'Content-Type': 'application/json' };
-      if (STATE.idToken) h['Authorization'] = 'Bearer ' + STATE.idToken;
+      if (STATE.authToken) h['Authorization'] = 'Bearer ' + STATE.authToken;
       return h;
     }
     async function loadLogs(retry) {

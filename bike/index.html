@@ -251,6 +251,11 @@
       apiBase: '',
       lineUserId: '',
       idToken: '',
+      // Server-side session token issued by the host's /api/auth/login
+      // against the employees table. Same bearer the bento tab uses; the
+      // server enforces employees-table membership for /bike-logs and
+      // /api/orders alike.
+      authToken: '',
       authed: false,
       // Runtime tunables loaded from /api/config. Defaults match the server
       // fallback so the page works even if the fetch fails.
@@ -339,6 +344,7 @@
         STATE.apiBase = d.apiBase;
         STATE.idToken = d.idToken || '';
         STATE.lineUserId = d.lineUserId || '';
+        STATE.authToken = d.authToken || '';
         STATE.authed = true;
         onAuthed();
       } else if (d.type === 'bike-auth-error') {
@@ -395,7 +401,7 @@
     // ---- API ----
     function authHeaders() {
       const h = { 'Content-Type': 'application/json' };
-      if (STATE.idToken) h['Authorization'] = 'Bearer ' + STATE.idToken;
+      if (STATE.authToken) h['Authorization'] = 'Bearer ' + STATE.authToken;
       return h;
     }
 

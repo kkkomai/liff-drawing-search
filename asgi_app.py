@@ -39,7 +39,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -603,6 +603,72 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Line-User-Id"],
 )
+
+# --------------------------------------------------------------------------- #
+# Employees-table access gate.
+#
+# Mirrors the rule /api/orders already enforces: the request must carry a
+# Bearer session token issued by /api/auth/login against the employees
+# table. /api/auth/login, /api/runtime-config, /api/config and the static
+# assets are deliberately exempt — the login endpoint has to be reachable
+# to issue a token, the config endpoints are public tunables, and the
+# static pages are what the LIFF entry URL serves to bootstrap the app.
+#
+# Applied as a middleware (not a per-route dependency) so the gate is
+# uniform across the public-facing endpoints without re-decorating each
+# handler. Unauthenticated requests get 401 with the same shape the bento
+# deps layer returns.
+# --------------------------------------------------------------------------- #
+import logging as _logging  # noqa: E402  (late import to keep top of file tidy)
+
+_logger = _logging.getLogger("uvicorn.error")
+
+# Lazy import target for the bento auth dependency. The bento app is only
+# importable when its deps (app.db etc.) are reachable, so defer the import
+# to the first request — by then the bento routers have already been
+# mounted and the dep function exists.
+def _resolve_employee_or_401(request):
+    try:
+        from app.api.deps import current_employee
+    except Exception as exc:  # noqa: BLE001
+        # bento backend not importable in this environment; refuse rather
+        # than silently bypass. The /api/orders path would 500 in the same
+        # situation, so refusing here keeps the failure mode consistent.
+        raise HTTPException(
+            status_code=503,
+            detail="auth backend unavailable: " + str(exc),
+        )
+    return current_employee(request)
+
+
+_PROTECTED_PREFIXES = (
+    "/schedules",
+    "/bike-logs",
+    # /api/orders and /api/admin are already protected by their own deps.
+)
+
+
+@app.middleware("http")
+async def _employees_auth_gate(request, call_next):
+    path = request.url.path
+    # Allow the bento routers to handle their own auth via deps. We only
+    # intercept the public endpoints the host used to expose unauthenticated.
+    if any(path == p or path.startswith(p + "/") for p in _PROTECTED_PREFIXES):
+        try:
+            _resolve_employee_or_401(request)
+        except HTTPException as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+            )
+        except Exception as exc:  # noqa: BLE001
+            # If the bento auth backend cannot even import, fail closed.
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "auth backend unavailable: " + str(exc)},
+            )
+    return await call_next(request)
+
 
 # Static site last: index.html is the LIFF endpoint, bento/ holds the iframe app.
 #
