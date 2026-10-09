@@ -71,7 +71,15 @@ def login(body: LoginRequest, settings: Settings = Depends(get_settings)) -> Log
         bind("SELECT id, employee_code, name, role, is_active FROM employees WHERE line_user_id = ?"),
         (body.line_user_id,),
     ).fetchone()
-    if row is None or not row["is_active"]:
+    # Any registered line_user_id is allowed in, regardless of the
+    # ``is_active`` flag — the user-facing app is gated by membership in
+    # the employees table, not by an admin-controlled per-row toggle.
+    # The bento admin tooling can still flip ``is_active`` to hide a row
+    # from the ordering screens without locking the user out of the rest
+    # of the application. (Historical: the original code required
+    # ``is_active = TRUE`` here, which silently excluded deactivated users
+    # from the form site too.)
+    if row is None:
         raise forbidden(
             "unauthorized_user",
             "このLINEアカウントは社員マスタに登録されていません。",
