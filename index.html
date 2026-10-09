@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261009auth</title>
-  <script>window.__v="20261009auth";</script>
+  <title>申請フォーム - v20261009auth2</title>
+  <script>window.__v="20261009auth2";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009auth)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009auth2)</span></h1>
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -1814,17 +1814,41 @@ liff.init({
     async function authenticateWithBento(retry) {
       retry = retry || 0;
       try {
-        var idToken = (typeof liff !== 'undefined' && liff.idToken) ? liff.idToken() : null;
         var lineUserId = null;
-        try { lineUserId = liff.getContext().userId || null; } catch (e) { lineUserId = null; }
-        if (!idToken || !lineUserId) {
-          // liff.init may not have the context yet — schedule a retry.
-          if (retry < 5) {
-            setTimeout(function () { authenticateWithBento(retry + 1); }, 800);
+        try { lineUserId = (typeof liff !== 'undefined' && liff.getContext) ? (liff.getContext().userId || null) : null; } catch (e) { lineUserId = null; }
+        // liff.idToken() can legitimately be null right after liff.init()
+        // resolves if the LIFF SDK is still resolving the openid context.
+        // Keep polling until the token arrives or we hit a generous budget
+        // — the previous 5-iteration cap (~4s) was too short on Render
+        // cold-starts where liff.init() returned instantly but the SDK
+        // handshake had not actually settled yet.
+        var idToken = (typeof liff !== 'undefined' && liff.idToken) ? liff.idToken() : null;
+        if (!lineUserId) {
+          // No userId at all means liff.init() has not resolved. Wait
+          // longer than for the idToken-only case.
+          if (retry < 30) {
+            setTimeout(function () { authenticateWithBento(retry + 1); }, 1000);
           } else {
-            log('authenticateWithBento: giving up (no idToken/userId)', true);
+            log('authenticateWithBento: giving up (no userId after 30s)', true);
+            showAuthFailure('LINEの認証が完了しません。LINEアプリを完全に終了し、もう一度開いてください。');
           }
           return;
+        }
+        if (!idToken) {
+          // userId is present but idToken is null — most often the openid
+          // scope is missing or not saved in the LIFF console. We still
+          // send a login request with an empty id_token; the server will
+          // accept it only when BENTO_ALLOW_LOGIN_WITHOUT_ID_TOKEN=true
+          // is set, but the attempt itself is harmless and lets the server
+          // side give the same actionable error message.
+          if (retry < 20) {
+            setTimeout(function () { authenticateWithBento(retry + 1); }, 1000);
+          } else {
+            log('authenticateWithBento: idToken stays null after 20s; attempting login without id_token (will fail unless allow_login_without_id_token=true)', true);
+          }
+          // Either way (token arrived or we gave up waiting), fall through
+          // and POST. The empty string for id_token is a valid value when
+          // the server has the no-id-token escape hatch enabled.
         }
         // Use the same API base the bento iframe uses. The bento backend is
         // mounted on this same origin via app.include_router, so an empty
@@ -1836,7 +1860,7 @@ liff.init({
         var r = await fetch(apiBase + '/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ line_user_id: lineUserId, id_token: idToken }),
+          body: JSON.stringify({ line_user_id: lineUserId, id_token: idToken || '' }),
           cache: 'no-store',
         });
         if (!r.ok) {
@@ -1845,9 +1869,14 @@ liff.init({
           // token-less credential bundle so the tabs can render; the server
           // side will reject their writes, which is the desired outcome.
           var errBody = await r.text();
-          log('authenticateWithBento: ' + r.status + ' ' + errBody.slice(0, 120), true);
+          log('authenticateWithBento: ' + r.status + ' ' + errBody.slice(0, 200), true);
           window[AUTH_TOKEN_KEY] = null;
           window[AUTH_USER_KEY] = null;
+          // Surface the reason on the page so the user can act on it
+          // without having to read the debug log. The bento backend's
+          // message is already user-actionable; just pass it through.
+          var msg = extractAuthMessage(errBody) || ('HTTP ' + r.status);
+          showAuthFailure(msg);
           return;
         }
         var j = await r.json();
@@ -1871,6 +1900,36 @@ liff.init({
           setTimeout(function () { authenticateWithBento(retry + 1); }, 1500);
         }
       }
+    }
+
+    // Pull the user-facing message out of the bento error envelope. The
+    // server returns ``{"detail":{"error":"...","message":"..."}}`` for
+    // auth failures; ``{"detail":[{...}]}`` for validation. The first
+    // shape is the one the user needs to read, so prefer it.
+    function extractAuthMessage(body) {
+      try {
+        var j = JSON.parse(body);
+        if (j && j.detail) {
+          if (typeof j.detail === 'object' && j.detail.message) return j.detail.message;
+          if (typeof j.detail === 'string') return j.detail;
+        }
+        return null;
+      } catch (e) { return null; }
+    }
+
+    // Show a full-page auth failure banner so the cause is impossible to
+    // miss. The existing #authWait overlay is the natural place to reuse
+    // — the host page does not have one, so create it on first use.
+    var _authFailureBanner = null;
+    function showAuthFailure(message) {
+      if (!_authFailureBanner) {
+        var b = document.createElement('div');
+        b.id = 'host-auth-failure';
+        b.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#b91c1c;color:#fff;padding:12px 16px;font-size:13px;z-index:99999;white-space:pre-wrap;line-height:1.5;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+        document.body.appendChild(b);
+        _authFailureBanner = b;
+      }
+      _authFailureBanner.textContent = '⚠ 認証エラー: ' + message;
     }
 
     function getAuthToken() {
