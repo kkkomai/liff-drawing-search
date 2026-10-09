@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261009retry</title>
-  <script>window.__v="20261009retry";</script>
+  <title>申請フォーム - v20261009hidden</title>
+  <script>window.__v="20261009hidden";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009retry)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009hidden)</span></h1>
 
   <!-- LIFF guard: when this page is opened outside the LINE LIFF WebView
        (e.g. by typing the URL into a normal browser), the application is
@@ -2051,6 +2051,38 @@ liff.init({
         _authFailureBanner = b;
       }
       _authFailureBanner.textContent = '⚠ 認証エラー: ' + message;
+      // The user is not authenticated. Hide the application shell so the
+      // form fields, calendars, and any cached content are not visible
+      // behind the banner — they were rendered briefly before the auth
+      // round-trip finished, and leaving them on screen leaks the shape
+      // of the application to anyone who fails the employees check.
+      // We do NOT call __liffUnavailable() here because that path is for
+      // "not in LINE at all" and shows the LINE-app gate. The red banner
+      // is the right surface for "inside LINE but not on the employees
+      // table" — the user is in the right place, they just need their
+      // admin to add them.
+      var shell = document.getElementById('application-shell');
+      if (shell) shell.style.display = 'none';
+      // Repurpose the LIFF-not-loaded guard as an auth-failure panel:
+      // the user is inside LINE, but their employees-table check failed.
+      // Show the same friendly modal with a different message so they
+      // know what to do (ask the admin to add their line_user_id).
+      var g = document.getElementById('liff-guard');
+      if (g) {
+        g.innerHTML = '<div style="max-width:420px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.05);">' +
+          '<div style="font-size:48px;margin-bottom:12px;">🔒</div>' +
+          '<h2 style="margin:0 0 8px;font-size:18px;color:#0f172a;">このアカウントではアプリを使用できません</h2>' +
+          '<p style="margin:0 0 16px;color:#64748b;font-size:14px;line-height:1.6;">' + escHtml(message) + '</p>' +
+          '<p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.5;">管理者にご連絡のうえ、employees テーブルへの登録をご確認ください。</p>' +
+        '</div>';
+        g.style.display = 'flex';
+      }
+    }
+
+    function escHtml(s) {
+      return String(s || '').replace(/[<>&"']/g, c => ({
+        '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'
+      })[c]);
     }
 
     function getAuthToken() {
