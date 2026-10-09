@@ -252,6 +252,12 @@
       lineUserId: '',
       idToken: '',
       authed: false,
+      // Runtime tunables loaded from /api/config. Defaults match the server
+      // fallback so the page works even if the fetch fails.
+      config: {
+        gps_sample_interval_ms: 180_000,  // 3 minutes
+        bike_page_title: '自転車ログ',
+      },
       logs: [],
       gps: {
         active: false,
@@ -344,7 +350,44 @@
       document.getElementById('authWait').style.display = 'none';
       document.getElementById('formCard').style.opacity = '1';
       setStatus('接続済み', true);
+      // Pull runtime tunables (GPS interval, page title) before the user
+      // hits the start button — otherwise the first sample would be on the
+      // hard-coded default and only later ticks would use the env-var value.
+      loadConfig();
       loadLogs();
+    }
+
+    async function loadConfig(retry) {
+      retry = retry || 0;
+      try {
+        const r = await fetch(STATE.apiBase + '/api/config', {
+          headers: authHeaders(),
+          cache: 'no-store',
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        if (j && typeof j === 'object') {
+          if (Number.isFinite(j.gps_sample_interval_ms) && j.gps_sample_interval_ms > 0) {
+            GPS_SAMPLE_INTERVAL_MS = j.gps_sample_interval_ms;
+            STATE.config.gps_sample_interval_ms = j.gps_sample_interval_ms;
+          }
+          if (typeof j.bike_page_title === 'string' && j.bike_page_title.trim()) {
+            STATE.config.bike_page_title = j.bike_page_title.trim();
+            document.title = STATE.config.bike_page_title;
+            // Update the visible header on the page too — the static <h1>
+            // cannot read env vars, so we patch it once after the fetch.
+            const headerSpan = document.querySelector('header span');
+            if (headerSpan) headerSpan.textContent = '🚴 ' + STATE.config.bike_page_title;
+          }
+        }
+      } catch (e) {
+        if (retry < 2) {
+          await new Promise(res => setTimeout(res, 1000 * Math.pow(2, retry)));
+          return loadConfig(retry + 1);
+        }
+        // Defaults already in place; the user can still use the page.
+        console.warn('config fetch failed, using defaults:', e.message);
+      }
     }
 
     // ---- API ----
@@ -504,11 +547,10 @@
       }
     });
 
-    // GPS sampling interval. Three minutes is enough to draw a recognisable
-    // polyline on the route-detail map without burning battery on the bike.
-    // Lower this to taste, but anything below ~30s doubles data and storage
-    // for almost no visible improvement at city-block scale.
-    const GPS_SAMPLE_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+    // GPS sample interval. Default 3 minutes; overwritten by /api/config
+    // when the page boots, so the Render env var GPS_SAMPLE_INTERVAL_MS
+    // takes effect without a code change.
+    let GPS_SAMPLE_INTERVAL_MS = 3 * 60 * 1000;
 
     function startGps() {
       if (!navigator.geolocation) {

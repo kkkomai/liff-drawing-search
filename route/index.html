@@ -178,6 +178,13 @@
       idToken: '',
       lineUserId: '',
       authed: false,
+      // Map defaults — overridden by /api/config (env vars
+      // ROUTE_MAP_DEFAULT_ZOOM and ROUTE_MAP_DEFAULT_CENTER) so the home
+      // view follows the user without redeploying.
+      config: {
+        route_map_default_zoom: 11,
+        route_map_default_center: [35.0116, 135.7681],  // 草津駅
+      },
       logs: [],
       selectedId: null,
       map: null,
@@ -260,7 +267,37 @@
     function onAuthed() {
       document.getElementById('authWait').style.display = 'none';
       setStatus('接続済み', true);
-      loadLogs();
+      // Pull map defaults from /api/config before ensureMap() runs, so the
+      // initial view follows the env var on the first paint.
+      loadConfig().then(() => loadLogs());
+    }
+
+    async function loadConfig(retry) {
+      retry = retry || 0;
+      try {
+        const r = await fetch(STATE.apiBase + '/api/config', {
+          headers: authHeaders(),
+          cache: 'no-store',
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        if (j && typeof j === 'object') {
+          if (Number.isFinite(j.route_map_default_zoom) && j.route_map_default_zoom > 0) {
+            STATE.config.route_map_default_zoom = j.route_map_default_zoom;
+          }
+          if (Array.isArray(j.route_map_default_center) && j.route_map_default_center.length === 2
+              && j.route_map_default_center.every(Number.isFinite)) {
+            STATE.config.route_map_default_center = j.route_map_default_center;
+          }
+        }
+      } catch (e) {
+        if (retry < 2) {
+          await new Promise(res => setTimeout(res, 1000 * Math.pow(2, retry)));
+          return loadConfig(retry + 1);
+        }
+        // Defaults already in place; the user can still use the page.
+        console.warn('config fetch failed, using defaults:', e.message);
+      }
     }
 
     // ---- API ----
@@ -306,7 +343,10 @@
     // ---- Map ----
     function ensureMap() {
       if (STATE.map) return;
-      const map = L.map('map', { zoomControl: true }).setView([35.0116, 135.7681], 11);
+      const map = L.map('map', { zoomControl: true }).setView(
+        STATE.config.route_map_default_center,
+        STATE.config.route_map_default_zoom
+      );
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap',
         maxZoom: 19,

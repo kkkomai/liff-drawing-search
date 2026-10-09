@@ -351,6 +351,73 @@ async def delete_schedule(schedule_id: str) -> JSONResponse:
 
 
 # --------------------------------------------------------------------------- #
+# Runtime configuration endpoint.
+#
+# Tabs that need user-tunable values (GPS sampling interval, map defaults,
+# page title) fetch this on boot. Reading env vars at request time means the
+# dashboard change applies on the next cold start with no code change.
+# Missing env vars fall back to the documented defaults so a fresh deploy
+# is functional without dashboard work.
+#
+# Privacy: only non-secret tunables are exposed. LINE credentials and
+# DATABASE_URL stay on the server.
+# --------------------------------------------------------------------------- #
+
+
+def _parse_float(value: str, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_int(value: str, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_center(value: str) -> list[float]:
+    """``"lat,lng"`` -> [lat, lng]. Falls back to default on any parse error."""
+    default = [35.0116, 135.7681]  # 草津駅
+    if not value:
+        return default
+    parts = [p.strip() for p in value.split(",")]
+    if len(parts) != 2:
+        return default
+    try:
+        lat = float(parts[0])
+        lng = float(parts[1])
+    except (TypeError, ValueError):
+        return default
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return default
+    return [lat, lng]
+
+
+@app.get("/api/config")
+def get_runtime_config() -> dict:
+    """Return tunables the frontend reads on boot.
+
+    Anything not set in the Render dashboard falls back to the documented
+    default. The shape is stable; adding a new key is non-breaking.
+    """
+    return {
+        "gps_sample_interval_ms": _parse_int(
+            os.environ.get("GPS_SAMPLE_INTERVAL_MS", ""), 180_000
+        ),
+        "route_map_default_zoom": _parse_int(
+            os.environ.get("ROUTE_MAP_DEFAULT_ZOOM", ""), 11
+        ),
+        "route_map_default_center": _parse_center(
+            os.environ.get("ROUTE_MAP_DEFAULT_CENTER", "")
+        ),
+        "bike_page_title": os.environ.get("BIKE_PAGE_TITLE", "自転車ログ") or "自転車ログ",
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Bike-log API (mirrors /schedules). DB-backed when DATABASE_URL is set, else
 # the JSON file at BASE_DIR/bike_logs.json — same Postgres-vs-JSON switch as
 # the schedules store. Render's free tier has ephemeral disk, so the JSON
