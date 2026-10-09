@@ -352,18 +352,38 @@
         fetchWeather(35.0116, 135.7681);
         return;
       }
+      // Hard fallback: even if the success/error callbacks never
+      // fire (the LINE WebView sometimes sits on the geolocation
+      // prompt without resolving), the user must not be stuck on
+      // the "取得中..." screen forever. A 10s budget gives the OS
+      // prompt a chance to appear and the user a chance to accept,
+      // then we fall back to Kusatsu station so the weather is
+      // always visible.
+      var fired = false;
+      var fallbackTimer = setTimeout(function () {
+        if (fired) return;
+        fired = true;
+        showToast('位置情報の取得がタイムアウトしました。草津駅の予報を表示します。');
+        fetchWeather(35.0116, 135.7681);
+      }, 10000);
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
+        function (pos) {
+          if (fired) return;
+          fired = true;
+          clearTimeout(fallbackTimer);
           fetchWeather(pos.coords.latitude, pos.coords.longitude);
         },
-        (err) => {
+        function (err) {
+          if (fired) return;
+          fired = true;
+          clearTimeout(fallbackTimer);
           // On permission denied or timeout, fall back to a sensible
           // default (Kusatsu station) so the user still sees weather
           // data instead of an empty screen.
           showToast('位置情報を取得できませんでした（' + err.message + '）。草津駅の予報を表示します。');
           fetchWeather(35.0116, 135.7681);
         },
-        { enableHighAccuracy: false, maximumAge: 30 * 60 * 1000, timeout: 15000 }
+        { enableHighAccuracy: false, maximumAge: 30 * 60 * 1000, timeout: 8000 }
       );
     }
 
