@@ -35,6 +35,10 @@ import json
 import logging
 import os
 import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -440,6 +444,147 @@ def get_runtime_config() -> dict:
             os.environ.get("ROUTE_MARKER_RADIUS", ""), 9
         ),
     }
+
+
+# --------------------------------------------------------------------------- #
+# Weather forecast (Open-Meteo, no API key, 16-day forecast).
+#
+# The client posts the rider's current position (or a fallback default)
+# and the server proxies to Open-Meteo. The response is cached in
+# memory keyed by rounded (lat, lng) so the upstream API is called at
+# most once per cache-window per cluster of nearby users, not once per
+# request. Cache TTL defaults to 6 hours — short enough that the
+# forecast updates whenever Open-Meteo refreshes (~hourly), long enough
+# to absorb the day-to-day traffic from a small team.
+#
+# The proxy is required so the client never has to know the upstream URL
+# or the cache policy. The bento auth gate does not protect this
+# endpoint because the forecast is non-sensitive; the LIFF guard and
+# the employees-table check on the host still cover write operations.
+# --------------------------------------------------------------------------- #
+_WEATHER_CACHE: dict[str, dict] = {}
+_WEATHER_CACHE_LOCK_NAME = "weather_cache_lock"
+try:
+    import threading as _threading
+    _WEATHER_CACHE_LOCK = _threading.Lock()
+except Exception:  # pragma: no cover - threading is always available on CPython
+    _WEATHER_CACHE_LOCK = None
+
+
+def _weather_cache_key(lat: float, lng: float) -> str:
+    # Round to 0.01° (~1.1 km) so users within the same neighbourhood
+    # share a cache slot. The forecast at this resolution is identical
+    # for practical purposes.
+    return f"{round(lat, 2):.2f},{round(lng, 2):.2f}"
+
+
+def _weather_cache_ttl_seconds() -> int:
+    return _parse_int(os.environ.get("WEATHER_CACHE_HOURS", ""), 6) * 3600
+
+
+def _parse_weather_args(lat: str, lng: str) -> tuple[float, float] | None:
+    try:
+        la = float(lat)
+        ln = float(lng)
+    except (TypeError, ValueError):
+        return None
+    if not (-90 <= la <= 90 and -180 <= ln <= 180):
+        return None
+    return la, ln
+
+
+def _fetch_open_meteo(lat: float, lng: float) -> dict:
+    """Hit Open-Meteo and return a normalised JSON payload.
+
+    Raises ``urllib.error.URLError`` on network failure, ``TimeoutError`` on
+    a slow upstream. The caller wraps these in a 502.
+    """
+    params = {
+        "latitude": str(lat),
+        "longitude": str(lng),
+        "current": "temperature_2m,wind_speed_10m,wind_direction_10m,weather_code",
+        "hourly": "temperature_2m,precipitation_probability,wind_speed_10m,weather_code",
+        "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_direction_10m_dominant,uv_index_max",
+        "forecast_days": "16",
+        "timezone": "Asia/Tokyo",
+    }
+    url = "https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "liff-drawing-search/1.0 (weather-proxy)",
+        "Accept": "application/json",
+    })
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        body = resp.read()
+    return json.loads(body.decode("utf-8"))
+
+
+@app.get("/api/weather")
+def get_weather_forecast(lat: str, lng: str) -> JSONResponse:
+    """Return the 16-day Open-Meteo forecast for the given coordinates.
+
+    ``lat`` and ``lng`` are required query parameters. The server caches
+    the upstream response in-memory and serves a 503 if both the cache
+    and Open-Meteo are unreachable, rather than fabricating data.
+    """
+    parsed = _parse_weather_args(lat, lng)
+    if not parsed:
+        raise HTTPException(status_code=400, detail="lat/lng must be valid coordinates")
+    la, ln = parsed
+    key = _weather_cache_key(la, ln)
+    now = time.time()
+    ttl = _weather_cache_ttl_seconds()
+    if _WEATHER_CACHE_LOCK:
+        with _WEATHER_CACHE_LOCK:
+            entry = _WEATHER_CACHE.get(key)
+        if entry and (now - entry["ts"]) < ttl:
+            payload = entry["data"]
+            return JSONResponse(
+                content={
+                    "cached": True,
+                    "cached_at": entry["ts"],
+                    "latitude": la,
+                    "longitude": ln,
+                    "forecast": payload,
+                },
+                headers={"Cache-Control": "public, max-age=600"},
+            )
+    # Cache miss or expired. Hit Open-Meteo.
+    try:
+        forecast = _fetch_open_meteo(la, ln)
+    except urllib.error.URLError as exc:
+        # If we have any cached entry (even expired), serve it as a
+        # stale fallback. The client can decide whether to trust it.
+        if _WEATHER_CACHE_LOCK:
+            with _WEATHER_CACHE_LOCK:
+                entry = _WEATHER_CACHE.get(key)
+        if entry:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "cached": True,
+                    "stale": True,
+                    "cached_at": entry["ts"],
+                    "latitude": la,
+                    "longitude": ln,
+                    "forecast": entry["data"],
+                    "warning": "upstream unavailable, returning cached data: " + str(exc),
+                },
+                headers={"Cache-Control": "public, max-age=60"},
+            )
+        raise HTTPException(status_code=502, detail="weather upstream unavailable: " + str(exc))
+    if _WEATHER_CACHE_LOCK:
+        with _WEATHER_CACHE_LOCK:
+            _WEATHER_CACHE[key] = {"ts": now, "data": forecast}
+    return JSONResponse(
+        content={
+            "cached": False,
+            "cached_at": now,
+            "latitude": la,
+            "longitude": ln,
+            "forecast": forecast,
+        },
+        headers={"Cache-Control": "public, max-age=600"},
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -884,6 +1029,9 @@ if (BASE_DIR / "bento").is_dir():
 
 if (BASE_DIR / "bike").is_dir():
     app.mount("/bike", StaticFiles(directory=str(BASE_DIR / "bike"), html=True), name="bike")
+
+if (BASE_DIR / "weather").is_dir():
+    app.mount("/weather", StaticFiles(directory=str(BASE_DIR / "weather"), html=True), name="weather")
 
 _NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate"}
 

@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261009sticky</title>
-  <script>window.__v="20261009sticky";</script>
+  <title>申請フォーム - v20261009weather</title>
+  <script>window.__v="20261009weather";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009sticky)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009weather)</span></h1>
 
   <!-- LIFF guard: when this page is opened outside the LINE LIFF WebView
        (e.g. by typing the URL into a normal browser), the application is
@@ -188,6 +188,7 @@
       <button id="tab-paid-btn" class="tab" data-tab="paid" ontouchstart="switchTab('paid')" onclick="switchTab('paid')">有給申請</button>
       <button id="tab-bento-btn" class="tab" data-tab="bento" ontouchstart="switchTab('bento')" onclick="switchTab('bento')">お弁当注文</button>
       <button id="tab-bike-btn" class="tab" data-tab="bike" ontouchstart="switchTab('bike')" onclick="switchTab('bike')">自転車ログ</button>
+      <button id="tab-weather-btn" class="tab" data-tab="weather" ontouchstart="switchTab('weather')" onclick="switchTab('weather')">天気予報</button>
     </div>
 
   <div class="tab-content active" id="tab-overtime">
@@ -308,6 +309,15 @@
             data-src="bike/index.html?embedded=1"></iframe>
   </div>
 
+  <div class="tab-content" id="tab-weather">
+    <!-- Weather forecast tab. 16-day forecast for the rider's current
+         location, served by the server's /api/weather proxy (which
+         caches Open-Meteo responses in-memory for 6 hours by default). -->
+    <iframe id="weather-frame" title="天気予報"
+            style="width:100%;height:900px;min-height:900px;border:0;display:block;background:#f5f6f8;"
+            data-src="weather/index.html?embedded=1"></iframe>
+  </div>
+
   <div class="editor-overlay" id="editor-overlay" style="display:none !important;">
     <div class="editor-header">
       <span>画像編集（4:3 / 3:4）</span>
@@ -361,6 +371,7 @@
       console.log('switchTab called: ' + tabName);
       if (tabName === 'bento') ensureBentoFrame();
       if (tabName === 'bike') ensureBikeFrame();
+      if (tabName === 'weather') ensureWeatherFrame();
       if (tabName === 'paid' && typeof loadPaidHistories === 'function') {
         try { loadPaidHistories(); } catch (e) { log('loadPaidHistories failed: ' + e.message, true); }
       }
@@ -549,7 +560,76 @@
         sendBikeCredentials();
         return;
       }
+      if (ev.data.type === 'weather-ready') {
+        log('weather iframe requested credentials');
+        sendWeatherCredentials();
+        return;
+      }
     });
+
+    // === WEATHER TAB (16-day forecast via /api/weather) ===
+    var weatherRetryTimer = null;
+    var WEATHER_MAX_RETRIES = 200;
+    var weatherRetries = 0;
+
+    function ensureWeatherFrame() {
+      var frame = document.getElementById('weather-frame');
+      if (!frame) return;
+      if (frame.dataset.loaded !== '1') {
+        // weather lives on the same origin as the host (this server
+        // serves /weather/), so no apiBase override is needed; the
+        // child reads its own location.
+        frame.src = frame.dataset.src;
+        frame.dataset.loaded = '1';
+        log('ensureWeatherFrame: loading ' + frame.src);
+      }
+      sendWeatherCredentials();
+    }
+
+    function sendWeatherCredentials() {
+      var frame = document.getElementById('weather-frame');
+      if (!frame || !frame.contentWindow) return;
+      var cred = buildLiffCredentials();
+      if (!cred.lineUserId) {
+        diag('3d. 天気予報', 'userId 未取得（リトライ中）');
+        scheduleWeatherCredentials();
+        return;
+      }
+      var payload = {
+        type: 'weather-credentials',
+        lineUserId: cred.lineUserId,
+        idToken: cred.idToken,
+        authToken: getAuthToken(),
+        apiBase: window.location.origin,
+      };
+      frame.contentWindow.postMessage(payload, window.location.origin);
+      log('sendWeatherCredentials: sent to weather iframe');
+    }
+
+    function scheduleWeatherCredentials() {
+      if (weatherRetryTimer) return;
+      if (weatherRetries >= WEATHER_MAX_RETRIES) {
+        log('sendWeatherCredentials: giving up after ' + weatherRetries + ' retries', true);
+        try {
+          var stuck = document.getElementById('weather-frame');
+          if (stuck && stuck.contentWindow) {
+            stuck.contentWindow.postMessage({
+              type: 'weather-auth-error',
+              message: whyLiffUnavailable(),
+            }, window.location.origin);
+          }
+        } catch (e) {
+          log('sendWeatherCredentials: could not deliver auth error: ' + e.message, true);
+        }
+        return;
+      }
+      weatherRetries++;
+      weatherRetryTimer = setTimeout(function () {
+        weatherRetryTimer = null;
+        sendWeatherCredentials();
+      }, 300);
+    }
+    function resetWeatherCredentials() { weatherRetries = 0; }
 
     // === BIKE TAB (same pattern as bento) ===
     var bikeRetryTimer = null;
@@ -2077,8 +2157,10 @@ liff.init({
         // Re-send credentials so child tabs receive the new authToken.
         resetBentoCredentials();
         resetBikeCredentials();
+        resetWeatherCredentials();
         sendBentoCredentials();
         sendBikeCredentials();
+        sendWeatherCredentials();
         // Re-fetch /schedules now that a Bearer token is available — the
         // initial loadSchedules() call issued before the token arrived
         // would have hit 401 and rendered an empty calendar. Now that we
