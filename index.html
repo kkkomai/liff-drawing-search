@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261009hidden</title>
-  <script>window.__v="20261009hidden";</script>
+  <title>申請フォーム - v20261009retry2</title>
+  <script>window.__v="20261009retry2";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009hidden)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009retry2)</span></h1>
 
   <!-- LIFF guard: when this page is opened outside the LINE LIFF WebView
        (e.g. by typing the URL into a normal browser), the application is
@@ -1976,10 +1976,38 @@ liff.init({
           // unauthenticated, 403 not on the employees master, 503 ID
           // token verification disabled). Retry would not help, so show
           // the reason and stop.
+          //
+          // 5xx is a server-side problem, almost always Render's first
+          // request after a cold-start (~50s boot). The user is not at
+          // fault and the situation is not stable — retry with a
+          // generous backoff before declaring auth failed. Up to 10
+          // attempts with exponential backoff (3s, 6s, 9s, ..., 30s)
+          // covers the worst-case Render cold-start without leaving the
+          // user staring at a red screen for too long.
           var errBody = await r.text();
-          if (r.status >= 500 && retry < 5) {
-            log('authenticateWithBento: ' + r.status + ' (retry ' + (retry + 1) + '/5) ' + errBody.slice(0, 120), true);
-            setTimeout(function () { authenticateWithBento(retry + 1); }, 2000 * (retry + 1));
+          if (r.status >= 500 && retry < 10) {
+            var backoffMs = 3000 * (retry + 1);
+            log('authenticateWithBento: ' + r.status + ' (retry ' + (retry + 1) + '/10 in ' + (backoffMs/1000) + 's) ' + errBody.slice(0, 120), true);
+            // Show a transient status banner — not the red error — so
+            // the user knows we are still working through the cold
+            // start instead of declaring failure. The previous version
+            // skipped any visual feedback and the user saw a frozen
+            // splash for up to a minute.
+            showAuthStatus('サーバ起動中…(' + (retry + 1) + '/10)');
+            setTimeout(function () { authenticateWithBento(retry + 1); }, backoffMs);
+            return;
+          }
+          // 10 retries exhausted. If the final failure is still a 5xx,
+          // reload the page — Render may need a full restart and a
+          // refresh of the in-process bento module. Doing it once is
+          // better than leaving the user on a red screen; a hard
+          // refresh is the documented way out of an inconsistent
+          // worker state.
+          if (r.status >= 500 && !window.__authReloaded) {
+            log('authenticateWithBento: ' + r.status + ' exhausted retries — reloading once', true);
+            window.__authReloaded = true;
+            showAuthStatus('サーバを再起動しています…');
+            setTimeout(function () { window.location.reload(); }, 1500);
             return;
           }
           log('authenticateWithBento: ' + r.status + ' ' + errBody.slice(0, 200), true);
@@ -2000,6 +2028,14 @@ liff.init({
         window[AUTH_USER_KEY] = j.employee || null;
         diag('2a. 社員認証', tok ? 'OK: ' + (j.employee && j.employee.name) : '拒否');
         log('authenticateWithBento: ' + (tok ? 'authenticated as ' + (j.employee && j.employee.name) : 'no token'));
+        // Clear any transient status banner now that the auth
+        // round-trip finished — it served its purpose during the cold-
+        // start wait, but a persistent "サーバ起動中…" after the user
+        // is signed in reads as a stuck app.
+        if (tok && _authFailureBanner && _authFailureBanner.parentNode) {
+          _authFailureBanner.parentNode.removeChild(_authFailureBanner);
+          _authFailureBanner = null;
+        }
         // Re-send credentials so child tabs receive the new authToken.
         resetBentoCredentials();
         resetBikeCredentials();
@@ -2042,6 +2078,16 @@ liff.init({
     // miss. The existing #authWait overlay is the natural place to reuse
     // — the host page does not have one, so create it on first use.
     var _authFailureBanner = null;
+    function showAuthStatus(message) {
+      if (!_authFailureBanner) {
+        var b = document.createElement('div');
+        b.id = 'host-auth-failure';
+        b.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#1d4ed8;color:#fff;padding:12px 16px;font-size:13px;z-index:99999;white-space:pre-wrap;line-height:1.5;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+        document.body.appendChild(b);
+        _authFailureBanner = b;
+      }
+      _authFailureBanner.textContent = '⏳ ' + message;
+    }
     function showAuthFailure(message) {
       if (!_authFailureBanner) {
         var b = document.createElement('div');
@@ -2067,11 +2113,15 @@ liff.init({
       // the user is inside LINE, but their employees-table check failed.
       // Show the same friendly modal with a different message so they
       // know what to do (ask the admin to add their line_user_id).
+      // The panel intentionally does NOT mention "LINEアプリから開いて
+      // ください" — that instruction is for users who opened the URL
+      // in a normal browser, not for users who reached this screen via
+      // an authenticated LIFF session.
       var g = document.getElementById('liff-guard');
       if (g) {
         g.innerHTML = '<div style="max-width:420px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.05);">' +
           '<div style="font-size:48px;margin-bottom:12px;">🔒</div>' +
-          '<h2 style="margin:0 0 8px;font-size:18px;color:#0f172a;">このアカウントではアプリを使用できません</h2>' +
+          '<h2 style="margin:0 0 8px;font-size:18px;color:#0f172a;">認証に失敗しました</h2>' +
           '<p style="margin:0 0 16px;color:#64748b;font-size:14px;line-height:1.6;">' + escHtml(message) + '</p>' +
           '<p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.5;">管理者にご連絡のうえ、employees テーブルへの登録をご確認ください。</p>' +
         '</div>';
