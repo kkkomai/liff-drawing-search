@@ -94,6 +94,14 @@
       scroll-snap-align: start;
     }
     .daily-card.today { border-color: var(--accent); border-width: 2px; }
+    .daily-card.selected {
+      border-color: var(--accent);
+      border-width: 2px;
+      background: #e0f2fe;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+      transform: translateY(-2px);
+    }
+    .daily-card.selected .weekday { color: var(--accent); }
     .daily-card .date {
       font-size: 11px;
       color: var(--muted);
@@ -489,6 +497,19 @@
       const hourly = STATE.forecast.hourly || {};
       const time = (daily.time || [])[i];
       if (!time) return;
+      // Highlight the selected card and scroll it into view. The cards
+      // live in a horizontal scroller, so without explicit scrolling the
+      // selected card may be off-screen and the user has no visual
+      // confirmation that the click registered. ``scrollIntoView`` with
+      // 'nearest' keeps the surrounding cards stable when the click
+      // target is already visible.
+      document.querySelectorAll('.daily-card').forEach(el => {
+        el.classList.toggle('selected', el.dataset.idx === String(i));
+      });
+      const target = document.querySelector('.daily-card[data-idx="' + i + '"]');
+      if (target && target.scrollIntoView) {
+        target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      }
       const dt = new Date(time + 'T00:00:00');
       const today = new Date();
       today.setHours(0, 0, 0, 0);
