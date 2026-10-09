@@ -544,6 +544,7 @@ def get_weather_forecast(lat: str, lng: str) -> JSONResponse:
                     "cached_at": entry["ts"],
                     "latitude": la,
                     "longitude": ln,
+                    "place_name": entry.get("place_name"),
                     "forecast": payload,
                 },
                 headers={"Cache-Control": "public, max-age=600"},
@@ -566,25 +567,98 @@ def get_weather_forecast(lat: str, lng: str) -> JSONResponse:
                     "cached_at": entry["ts"],
                     "latitude": la,
                     "longitude": ln,
+                    "place_name": entry.get("place_name"),
                     "forecast": entry["data"],
                     "warning": "upstream unavailable, returning cached data: " + str(exc),
                 },
                 headers={"Cache-Control": "public, max-age=60"},
             )
         raise HTTPException(status_code=502, detail="weather upstream unavailable: " + str(exc))
+    # Resolve a human-readable place name via Nominatim (OpenStreetMap).
+    # We piggy-back on the same cache TTL as the forecast so we don't
+    # add a second round-trip per request. Nominatim's usage policy
+    # is 1 req/s, which our hourly cache comfortably respects.
+    place_name = _reverse_geocode(la, ln)
     if _WEATHER_CACHE_LOCK:
         with _WEATHER_CACHE_LOCK:
-            _WEATHER_CACHE[key] = {"ts": now, "data": forecast}
+            _WEATHER_CACHE[key] = {
+                "ts": now,
+                "data": forecast,
+                "place_name": place_name,
+            }
     return JSONResponse(
         content={
             "cached": False,
             "cached_at": now,
             "latitude": la,
             "longitude": ln,
+            "place_name": place_name,
             "forecast": forecast,
         },
         headers={"Cache-Control": "public, max-age=600"},
     )
+
+
+_GEOCODE_CACHE: dict[str, str | None] = {}
+_GEOCODE_CACHE_LOCK = _threading.Lock() if "_threading" in dir() else None
+
+
+def _reverse_geocode(lat: float, lng: float) -> str | None:
+    """Look up a short place name for the given coordinates.
+
+    Uses Nominatim (OpenStreetMap) which is free and needs no API key.
+    The result is cached for 24 hours so a 1-req-per-second rate
+    limit is comfortably respected for the lifetime of the cache.
+    Returns ``None`` on any failure so the client can fall back to
+    showing the raw coordinates.
+    """
+    key = f"{round(lat, 2):.2f},{round(lng, 2):.2f}"
+    now = time.time()
+    if _GEOCODE_CACHE_LOCK:
+        with _GEOCODE_CACHE_LOCK:
+            entry = _GEOCODE_CACHE.get(key)
+        if entry and (now - entry[0]) < 86400:
+            return entry[1]
+    url = (
+        "https://nominatim.openstreetmap.org/reverse?"
+        + urllib.parse.urlencode({
+            "format": "jsonv2",
+            "lat": f"{lat:.4f}",
+            "lon": f"{lng:.4f}",
+            "accept-language": "ja",
+            "zoom": "10",
+        })
+    )
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "liff-drawing-search/1.0 (weather-geocoder)",
+        "Accept": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            body = resp.read().decode("utf-8")
+        j = json.loads(body)
+    except Exception:
+        return None
+    addr = j.get("address") if isinstance(j, dict) else None
+    if not isinstance(addr, dict):
+        return None
+    # Prefer the most specific label the user recognises: a town or
+    # village when we have one, otherwise the city, otherwise the
+    # county. Fall back to the full display_name if nothing matches.
+    label = (
+        addr.get("village")
+        or addr.get("town")
+        or addr.get("suburb")
+        or addr.get("neighbourhood")
+        or addr.get("city")
+        or addr.get("county")
+        or addr.get("region")
+        or j.get("display_name")
+    )
+    if _GEOCODE_CACHE_LOCK:
+        with _GEOCODE_CACHE_LOCK:
+            _GEOCODE_CACHE[key] = (now, label)
+    return label
 
 
 # --------------------------------------------------------------------------- #

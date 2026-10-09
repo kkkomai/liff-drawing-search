@@ -78,6 +78,21 @@
 
     /* Weather tab (inlined). Mirrors the styling from the previous
        /weather/ iframe so the inlined version looks identical. */
+    .weather-cta {
+      background: #0284c7;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .weather-cta.secondary {
+      background: #f1f5f9;
+      color: #334155;
+    }
     .weather-scroller {
       display: flex;
       gap: 8px;
@@ -667,23 +682,45 @@
           '<div id="weather-detail-body"></div>' +
         '</div>';
 
-      // Trigger geolocation immediately. Hard fallback after 8s so a
-      // hung prompt cannot trap the user on "取得中...".
+      // Geolocation must be triggered from a user gesture on iOS
+      // Safari/WebView — calling it directly from a script tag or a
+      // tab-switch handler silently no-ops. Show a button that
+      // resolves the position on tap. If the user has already granted
+      // permission (or wants the Kusatsu default), the buttons let
+      // them pick the path without blocking the forecast.
+      var currentEl = document.getElementById('weather-current');
+      currentEl.innerHTML =
+        '<div style="text-align:center;padding:16px 8px;">' +
+          '<div style="margin-bottom:12px;color:var(--muted);">位置情報の利用にはボタンでの操作が必要です</div>' +
+          '<button type="button" class="weather-cta" id="weather-locate-btn">📍 現在地の天気を取得</button>' +
+          ' <button type="button" class="weather-cta secondary" id="weather-default-btn">草津駅の天気を表示</button>' +
+        '</div>';
+
+      var locateBtn = document.getElementById('weather-locate-btn');
+      var defaultBtn = document.getElementById('weather-default-btn');
+      if (locateBtn) {
+        locateBtn.addEventListener('click', function () { doGeolocate(); });
+      }
+      if (defaultBtn) {
+        defaultBtn.addEventListener('click', function () {
+          document.getElementById('weather-status-h').textContent = '現在地の天気（草津駅の固定値）';
+          fetchWeather(WEATHER_DEFAULT.latitude, WEATHER_DEFAULT.longitude);
+        });
+      }
+    }
+
+    function doGeolocate() {
+      if (!navigator.geolocation) {
+        showWeatherError('このブラウザは位置情報に対応していません');
+        return;
+      }
+      document.getElementById('weather-status-h').textContent = '現在地の天気（位置情報を取得中...）';
       var fired = false;
       var fallback = setTimeout(function () {
         if (fired) return;
         fired = true;
-        document.getElementById('weather-status-h').textContent = '現在地の天気（草津駅の固定値）';
-        fetchWeather(WEATHER_DEFAULT.latitude, WEATHER_DEFAULT.longitude);
-      }, 8000);
-
-      if (!navigator.geolocation) {
-        clearTimeout(fallback);
-        fired = true;
-        document.getElementById('weather-status-h').textContent = '現在地の天気（位置情報未対応、草津駅の固定値）';
-        fetchWeather(WEATHER_DEFAULT.latitude, WEATHER_DEFAULT.longitude);
-        return;
-      }
+        showWeatherError('位置情報の取得がタイムアウトしました。');
+      }, 10000);
       navigator.geolocation.getCurrentPosition(
         function (pos) {
           if (fired) return;
@@ -695,11 +732,29 @@
           if (fired) return;
           fired = true;
           clearTimeout(fallback);
-          document.getElementById('weather-status-h').textContent = '現在地の天気（取得失敗、草津駅の固定値）';
-          fetchWeather(WEATHER_DEFAULT.latitude, WEATHER_DEFAULT.longitude);
+          showWeatherError('位置情報を取得できませんでした: ' + (err.message || err.code || 'unknown'));
         },
-        { enableHighAccuracy: false, maximumAge: 30 * 60 * 1000, timeout: 6000 }
+        { enableHighAccuracy: false, maximumAge: 5 * 60 * 1000, timeout: 8000 }
       );
+    }
+
+    function showWeatherError(msg) {
+      var currentEl = document.getElementById('weather-current');
+      if (!currentEl) return;
+      // Render the error inline and offer the Kusatsu fallback as a
+      // tap target so the user can always see a forecast.
+      currentEl.innerHTML =
+        '<div style="text-align:center;padding:12px 8px;color:var(--bad);">' + escHtml(msg) + '</div>' +
+        '<div style="text-align:center;margin-top:8px;">' +
+          '<button type="button" class="weather-cta secondary" id="weather-fallback-btn">草津駅の天気を表示</button>' +
+        '</div>';
+      var fb = document.getElementById('weather-fallback-btn');
+      if (fb) {
+        fb.addEventListener('click', function () {
+          document.getElementById('weather-status-h').textContent = '現在地の天気（草津駅の固定値）';
+          fetchWeather(WEATHER_DEFAULT.latitude, WEATHER_DEFAULT.longitude);
+        });
+      }
     }
 
     function fetchWeather(lat, lng) {
@@ -775,6 +830,11 @@
       var f = j.forecast || {};
       var c = f.current || {};
       var d = f.daily || {};
+      // The server attaches a reverse-geocoded place name when the
+      // Nominatim lookup succeeds. Prefer it; fall back to the
+      // raw lat/lng pair so the user always knows where the
+      // forecast is for.
+      var placeName = j.place_name || null;
       var d0 = {
         code: (c.weather_code !== undefined) ? c.weather_code : (d.weather_code ? d.weather_code[0] : 0),
         temp: c.temperature_2m,
@@ -800,11 +860,18 @@
             '<div class="current-cell">' +
               '<div class="label">降水 / 位置</div>' +
               '<div class="value" style="font-size:14px;">' + (d0.rain != null ? d0.rain : '--') + '<span class="unit">%</span></div>' +
-              '<div class="value" style="font-size:11px;color:var(--muted);">' + lat.toFixed(3) + ', ' + lng.toFixed(3) + '</div>' +
+              '<div class="value" style="font-size:13px;color:var(--fg);font-weight:600;">' + escHtml(placeName || (lat.toFixed(3) + ', ' + lng.toFixed(3))) + '</div>' +
             '</div>' +
           '</div>' +
         '</div>';
       document.getElementById('weather-current').innerHTML = currentHtml;
+      // Reflect the resolved place name in the section title too, so
+      // the heading "現在地の天気" becomes "現在地の天気 — 京都市".
+      var statusEl = document.getElementById('weather-status-h');
+      if (statusEl) {
+        var label = placeName || (lat.toFixed(3) + ', ' + lng.toFixed(3));
+        statusEl.textContent = '現在地の天気 — ' + label;
+      }
 
       // Daily scroller.
       var times = d.time || [];
