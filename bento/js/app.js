@@ -241,10 +241,14 @@
       return [t];
     }
     if (STATE.range === 'week') {
-      var wd = D.weekday(t);           // 0=日
-      var monday = D.addDays(t, -((wd + 6) % 7));
-      var start = D.addDays(monday, STATE.rangeOffset * 7);
-      return D.range(start, 0, 6);
+      // Rolling 15-day window centred on today: 1 week back, today, 1 week
+      // ahead. Lets the user both review the past week's orders and
+      // register / edit meals for the next seven days without paging
+      // forward. ``STATE.rangeOffset`` shifts the whole window by weeks.
+      // A rangeOffset of -1 shows [-14, 0] (the previous fortnight ending
+      // today); +1 shows [today, +14] (the next fortnight starting today).
+      var offsetDays = (STATE.rangeOffset || 0) * 7;
+      return D.range(D.addDays(t, -7 + offsetDays), 0, 14);
     }
     // all: 「全期間」= 過去 defaultPastDays 日 〜 未来 defaultFutureDays 日 を 3ヶ月ページで切替
     var pageSize = 90;
@@ -457,14 +461,11 @@
   });
   el.btnNext.addEventListener('click', function () {
     if (STATE.range === 'today') return;
-    if (STATE.range === 'week') {
-      var last = D.addDays(D.addDays(STATE.today, -((D.weekday(STATE.today) + 6) % 7)), STATE.rangeOffset * 7 + 6);
-      if (D.compare(last, D.addDays(STATE.today, cfg.defaultFutureDays)) > 0) {
-        toast('表示できる将来日は ' + cfg.defaultFutureDays + '日先までです。', true);
-        return;
-      }
-    } else if (STATE.rangeOffset >= 4) {
-      // 事前登録の上限は設けないが、誤操作で遠くまで飛べないように1年分はページに留める
+    if (STATE.rangeOffset >= 4) {
+      // Prevent paging far into the future on either range. 4 weeks of
+      // forward shift on 'week' is +35 days from today — well past the
+      // typical order-ahead horizon, and the past symmetry of the rolling
+      // 15-day window means the user has not lost any reasonable date.
       toast('これ以上先のページはありません。', true);
       return;
     }
