@@ -746,6 +746,27 @@
       // battery and a polyline dense enough to dwarf the route-detail map.
       sampleGps();
       STATE.gps.timer = setInterval(sampleGps, GPS_SAMPLE_INTERVAL_MS);
+      // iOS pauses every JS timer (including setInterval) while the
+      // screen is off, so the periodic sampler will stop firing the
+      // moment the user locks their phone. When they come back, the
+      // first tick may be many minutes late, leaving a long gap in
+      // the polyline. The visibilitychange event fires the moment the
+      // page becomes visible again, so we can take an immediate
+      // sample and reset the cadence without waiting for the next
+      // scheduled tick.
+      if (!STATE.gps.visibilityHandler) {
+        STATE.gps.visibilityHandler = function () {
+          if (document.visibilityState === 'visible' && STATE.gps.active) {
+            // Immediate sample, then re-arm the interval so future
+            // ticks stay on the same 3-minute cadence rather than
+            // drifting by however long the screen was off.
+            if (STATE.gps.timer) clearInterval(STATE.gps.timer);
+            sampleGps();
+            STATE.gps.timer = setInterval(sampleGps, GPS_SAMPLE_INTERVAL_MS);
+          }
+        };
+        document.addEventListener('visibilitychange', STATE.gps.visibilityHandler);
+      }
       gpsBtn.textContent = '⏹ GPS記録 停止';
       gpsStateEl.textContent = '計測中...（3分ごとに記録）';
       document.getElementById('map').style.display = 'block';
@@ -760,6 +781,11 @@
       STATE.gps.active = false;
       if (STATE.gps.timer) { clearInterval(STATE.gps.timer); STATE.gps.timer = null; }
       if (STATE.gps.displayTimer) { clearInterval(STATE.gps.displayTimer); STATE.gps.displayTimer = null; }
+      // Detach the visibility-change handler so a stray "visible"
+      // event from another tab interaction does not re-arm the
+      // sampler. The handler reference is left in STATE so a later
+      // startGps() reuses the same listener instead of stacking
+      // duplicates.
       gpsBtn.textContent = '📍 GPS記録 開始';
       gpsStateEl.textContent = STATE.gps.polyline.length + '点 / ' +
         (STATE.gps.totalDistanceM / 1000).toFixed(2) + ' km';
