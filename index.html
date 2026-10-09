@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261009panel</title>
-  <script>window.__v="20261009panel";</script>
+  <title>申請フォーム - v20261009sticky</title>
+  <script>window.__v="20261009sticky";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009panel)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009sticky)</span></h1>
 
   <!-- LIFF guard: when this page is opened outside the LINE LIFF WebView
        (e.g. by typing the URL into a normal browser), the application is
@@ -146,11 +146,29 @@
       // Expose a hook so initLiff can hide both the guard and the
       // 'application-shell' wrapper together. Keeping this in one place
       // means the visible-UI invariant is enforced from a single point.
+      //
+      // Both functions are guarded with a sticky flag. The liff
+      // context is decided once by initLiff(); later events
+      // (a tab switch, a network blip, a re-render) must not flip the
+      // user back to the "not in LINE" gate — that overlay looks
+      // like the server has lost track of them, when really nothing
+      // has changed about their session. Once liff.init() resolves
+      // with isInClient() === true, every later __liffUnavailable()
+      // call is a no-op.
+      var _liffReadyCalled = false;
       window.__liffReady = function () {
+        _liffReadyCalled = true;
         hideGuard();
         if (main) main.style.display = '';
       };
       window.__liffUnavailable = function () {
+        if (_liffReadyCalled) {
+          // Already confirmed to be a real LIFF session. Ignore the
+          // late call — it almost always means a transient liff state
+          // (sleep, tab change, cache miss) that is not the user's
+          // problem to solve.
+          return;
+        }
         showGuard();
         if (main) main.style.display = 'none';
       };
