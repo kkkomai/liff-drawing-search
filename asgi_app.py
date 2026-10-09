@@ -739,9 +739,12 @@ _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "Permissions-Policy": "geolocation=(self), camera=(), microphone=(), payment=()",
-    "X-Frame-Options": "ALLOW-FROM https://liff.line.me",
-    # Modern equivalent of X-Frame-Options, also respected by browsers
-    # that dropped the legacy header.
+    # No X-Frame-Options here. The modern equivalent below
+    # (``frame-ancestors 'self' https://liff.line.me`` in CSP) covers the
+    # same threat. Setting X-Frame-Options: ALLOW-FROM without 'self'
+    # actively breaks the host page's own bento/bike/route iframes on
+    # browsers that honour the legacy header — every child tab would
+    # render blank.
     "Content-Security-Policy": (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.line-scripts.com https://static.line-scdn.net https://unpkg.com; "
@@ -749,7 +752,15 @@ _SECURITY_HEADERS = {
         "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.tile.opentopomap.org; "
         "connect-src 'self' https://liff.line.me https://api.line.me; "
         "frame-src 'self' https://liff.line.me; "
-        "frame-ancestors https://liff.line.me; "
+        # The host page (served at / and /form.html, /bike/, /route/,
+        # /bento/) is itself loaded inside the LINE WebView at
+        # https://liff.line.me. ``frame-ancestors`` must therefore allow
+        # liff.line.me. Each child iframe is loaded at the same origin
+        # (https://liff-drawing-search.onrender.com) so ``self`` covers
+        # that too. Without ``self``, the host's own bento/bike/route
+        # iframes refuse to render and every tab after the first shows
+        # blank — which is the failure mode the previous policy had.
+        "frame-ancestors 'self' https://liff.line.me; "
         "font-src 'self' data:; "
         "object-src 'none'; "
         "base-uri 'self'; "
