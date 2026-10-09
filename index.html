@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261009merged</title>
-  <script>window.__v="20261009merged";</script>
+  <title>申請フォーム - v20261009guard</title>
+  <script>window.__v="20261009guard";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +83,59 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009merged)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009guard)</span></h1>
+
+  <!-- LIFF guard: when this page is opened outside the LINE LIFF WebView
+       (e.g. by typing the URL into a normal browser), the application is
+       not just unauthorised — there is no LINE identity to check. Block
+       the entire UI and show a single explanation. The guard self-removes
+       itself once liff.init() confirms a real LIFF context, so legitimate
+       users in LINE never see this overlay. -->
+  <div id="liff-guard" style="position:fixed;inset:0;background:#f8fafc;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;">
+    <div style="max-width:420px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.05);">
+      <div style="font-size:48px;margin-bottom:12px;">🔒</div>
+      <h2 style="margin:0 0 8px;font-size:18px;color:#0f172a;">LINEアプリから開いてください</h2>
+      <p style="margin:0;color:#64748b;font-size:14px;line-height:1.6;">
+        この申請フォームはLINE内のLIFFアプリです。通常のブラウザから開いても認証できません。<br><br>
+        <b>LINEアプリ内のリンクから開いてください。</b>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // The guard element exists above this script, so we can manipulate it
+    // directly. As soon as liff.init() resolves with a real LIFF context
+    // we hide the guard; if init() rejects or liff is missing, the guard
+    // stays up forever and the rest of the UI remains blocked.
+    (function () {
+      function showGuard() {
+        var g = document.getElementById('liff-guard');
+        if (g) g.style.display = 'flex';
+      }
+      function hideGuard() {
+        var g = document.getElementById('liff-guard');
+        if (g) g.style.display = 'none';
+      }
+      // The form area is rendered below; hide it by default so the guard
+      // is the only visible thing until we know we are in LIFF. We unhide
+      // it the moment we hide the guard.
+      var main = document.getElementById('application-shell');
+      if (main) main.style.display = 'none';
+      // Expose a hook so initLiff can hide both the guard and the
+      // 'application-shell' wrapper together. Keeping this in one place
+      // means the visible-UI invariant is enforced from a single point.
+      window.__liffReady = function () {
+        hideGuard();
+        if (main) main.style.display = '';
+      };
+      window.__liffUnavailable = function () {
+        showGuard();
+        if (main) main.style.display = 'none';
+      };
+    })();
+  </script>
+
+  <div id="application-shell">
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -1781,6 +1833,7 @@ var __el = document.getElementById('adjust-aspect');
           window.__liffInitError =
             'liff.init が60秒以内に解決しませんでした（サーバーの再起動中かもしれません）。';
           diag('2. liff.init', '60秒タイムアウト');
+          try { window.__liffUnavailable && window.__liffUnavailable(); } catch (e) { /* guard must never throw */ }
           resolve('timeout');
         }, 60000);
       });
@@ -1798,8 +1851,32 @@ liff.init({
           timeoutPromise
         ]);
         if (result !== 'timeout') {
+          // ``liff.init()`` resolves even when the page is opened in a
+          // normal browser — the SDK is loaded as a plain script, so
+          // ``liff`` exists and the promise resolves with an empty
+          // context. Use ``isInClient()`` / a real logged-in flag to
+          // decide whether the user is actually inside LINE.
+          var inClient = (typeof liff.isInClient === 'function') ? liff.isInClient() : false;
+          var loggedIn = (typeof liff.isLoggedIn === 'function') ? liff.isLoggedIn() : false;
+          if (!inClient) {
+            log('initLiff: not in LINE LIFF client — showing guard', true);
+            window.__liffInitError = 'LIFF外からのアクセスです。LINEアプリ内のリンクから開いてください。';
+            diag('2. liff.init', 'LIFF外');
+            try { window.__liffUnavailable && window.__liffUnavailable(); } catch (e) { /* guard must never throw */ }
+            return;
+          }
+          if (!loggedIn) {
+            log('initLiff: not logged in — showing guard', true);
+            window.__liffInitError = 'LINEログインが必要です。LINEアプリで再度リンクを開いてください。';
+            diag('2. liff.init', '未ログイン');
+            try { window.__liffUnavailable && window.__liffUnavailable(); } catch (e) { /* guard must never throw */ }
+            return;
+          }
           diag('2. liff.init', '成功');
           log('initLiff: liff.init SUCCESS');
+          // We are inside a real LIFF client with a logged-in user. Drop
+          // the guard and reveal the application shell.
+          try { window.__liffReady && window.__liffReady(); } catch (e) { /* guard must never throw */ }
           // The bento tab may already be waiting on credentials; hand them over
           // now instead of making it poll.
           resetBentoCredentials();
@@ -1815,6 +1892,11 @@ liff.init({
         window.__liffInitError = (err && (err.message || err.code || err.name)) || String(err);
         diag('2. liff.init', '失敗: ' + window.__liffInitError);
         log('initLiff: liff.init ERROR: ' + err.message, true);
+        // The most common cause is opening the URL in a normal browser:
+        // the SDK is loaded but liff.init() rejects because it cannot
+        // reach the LINE runtime. Show the guard so the user is told
+        // plainly what to do.
+        try { window.__liffUnavailable && window.__liffUnavailable(); } catch (e) { /* guard must never throw */ }
       }
       log('initLiff: COMPLETE');
     }
@@ -2058,6 +2140,8 @@ liff.init({
         loadPaidHistories();
     });
   </script>
-  
+
+  </div><!-- /application-shell -->
+
 </body>
 </html>

@@ -210,7 +210,7 @@
     .route-stats .stat.empty .v { color: var(--muted); font-weight: 400; font-size: 13px; }
     .route-map {
       width: 100%;
-      height: 280px;
+      height: 480px;
       background: #e2e8f0;
       border-radius: 8px;
       margin-bottom: 8px;
@@ -523,9 +523,24 @@
           throw new Error('HTTP ' + r.status + (body ? ' ' + body : ''));
         }
         const j = await r.json();
-        STATE.logs = j.logs || [];
+        // Normalise polyline: stored as JSON string; some legacy rows may
+        // already be a list. Accept both. Without this, every saved log
+        // looks GPS-less to the route-detail map and selectRoute() never
+        // finds anything to draw.
+        STATE.logs = (j.logs || []).map(l => {
+          let pl = l.polyline;
+          if (typeof pl === 'string') {
+            try { pl = JSON.parse(pl); } catch (e) { pl = []; }
+          }
+          if (!Array.isArray(pl)) pl = [];
+          return Object.assign({}, l, { polyline: pl });
+        });
         renderLogs();
         loadSummary();
+        // If the user has the route-detail tab open already, repaint the
+        // map now that fresh data arrived. Otherwise the next tab switch
+        // will pick up the latest STATE.logs via renderRouteIfActive().
+        renderRouteIfActive();
         return;
       } catch (e) {
         lastErr = e.message || String(e);
