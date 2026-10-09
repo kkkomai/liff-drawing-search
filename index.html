@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261009nore</title>
-  <script>window.__v="20261009nore";</script>
+  <title>申請フォーム - v20261009panel</title>
+  <script>window.__v="20261009panel";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,15 +83,23 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009nore)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009panel)</span></h1>
 
   <!-- LIFF guard: when this page is opened outside the LINE LIFF WebView
        (e.g. by typing the URL into a normal browser), the application is
        not just unauthorised — there is no LINE identity to check. Block
        the entire UI and show a single explanation. The guard self-removes
        itself once liff.init() confirms a real LIFF context, so legitimate
-       users in LINE never see this overlay. -->
-  <div id="liff-guard" style="position:fixed;inset:0;background:#f8fafc;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;">
+       users in LINE never see this overlay.
+
+       Initially hidden. The guard script below sets display:flex only if
+       liff.init() reports the page is not inside the LINE WebView, so
+       a healthy LIFF session never flashes this panel. A separate
+       `#auth-failure-panel` is used for "inside LINE but the employees
+       table rejected me" so the two failure modes can be displayed or
+       hidden independently — they were sharing the same overlay before
+       and the wrong one flashed on retry. -->
+  <div id="liff-guard" style="position:fixed;inset:0;background:#f8fafc;z-index:99999;display:none;align-items:center;justify-content:center;padding:24px;">
     <div style="max-width:420px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.05);">
       <div style="font-size:48px;margin-bottom:12px;">🔒</div>
       <h2 style="margin:0 0 8px;font-size:18px;color:#0f172a;">LINEアプリから開いてください</h2>
@@ -99,6 +107,20 @@
         この申請フォームはLINE内のLIFFアプリです。通常のブラウザから開いても認証できません。<br><br>
         <b>LINEアプリ内のリンクから開いてください。</b>
       </p>
+    </div>
+  </div>
+
+  <!-- Auth-failure panel: shown when the user is inside LINE but the
+       employees-table check rejected their line_user_id. Independent
+       from #liff-guard so the two failure modes never bleed into each
+       other. Initially hidden. The showAuthFailure() helper populates
+       and reveals it. -->
+  <div id="auth-failure-panel" style="position:fixed;inset:0;background:#f8fafc;z-index:99998;display:none;align-items:center;justify-content:center;padding:24px;">
+    <div style="max-width:420px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.05);">
+      <div style="font-size:48px;margin-bottom:12px;">🔒</div>
+      <h2 id="auth-failure-title" style="margin:0 0 8px;font-size:18px;color:#0f172a;">認証に失敗しました</h2>
+      <p id="auth-failure-body" style="margin:0 0 16px;color:#64748b;font-size:14px;line-height:1.6;"></p>
+      <p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.5;">管理者にご連絡のうえ、employees テーブルへの登録をご確認ください。</p>
     </div>
   </div>
 
@@ -2100,37 +2122,20 @@ liff.init({
       // behind the banner — they were rendered briefly before the auth
       // round-trip finished, and leaving them on screen leaks the shape
       // of the application to anyone who fails the employees check.
-      // We do NOT call __liffUnavailable() here because that path is for
-      // "not in LINE at all" and shows the LINE-app gate. The red banner
-      // is the right surface for "inside LINE but not on the employees
-      // table" — the user is in the right place, they just need their
-      // admin to add them.
       var shell = document.getElementById('application-shell');
       if (shell) shell.style.display = 'none';
-      // Repurpose the LIFF-not-loaded guard as an auth-failure panel:
-      // the user is inside LINE, but their employees-table check failed.
-      // Show the same friendly modal with a different message so they
-      // know what to do (ask the admin to add their line_user_id).
-      // The panel intentionally does NOT mention "LINEアプリから開いて
-      // ください" — that instruction is for users who opened the URL
-      // in a normal browser, not for users who reached this screen via
-      // an authenticated LIFF session.
-      var g = document.getElementById('liff-guard');
-      if (g) {
-        g.innerHTML = '<div style="max-width:420px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.05);">' +
-          '<div style="font-size:48px;margin-bottom:12px;">🔒</div>' +
-          '<h2 style="margin:0 0 8px;font-size:18px;color:#0f172a;">認証に失敗しました</h2>' +
-          '<p style="margin:0 0 16px;color:#64748b;font-size:14px;line-height:1.6;">' + escHtml(message) + '</p>' +
-          '<p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.5;">管理者にご連絡のうえ、employees テーブルへの登録をご確認ください。</p>' +
-        '</div>';
-        g.style.display = 'flex';
+      // Show the dedicated auth-failure panel. We do NOT touch
+      // #liff-guard because that overlay is reserved for the
+      // "not inside LINE at all" case; if we overwrote it here and the
+      // user's session later dropped back to the LIFF-not-loaded
+      // path, they would see the wrong message flash. The two panels
+      // are now independent so neither can corrupt the other.
+      var panel = document.getElementById('auth-failure-panel');
+      if (panel) {
+        var body = document.getElementById('auth-failure-body');
+        if (body) body.textContent = message;
+        panel.style.display = 'flex';
       }
-    }
-
-    function escHtml(s) {
-      return String(s || '').replace(/[<>&"']/g, c => ({
-        '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'
-      })[c]);
     }
 
     function getAuthToken() {
