@@ -396,9 +396,15 @@ def _parse_center(value: str) -> list[float]:
     return [lat, lng]
 
 
-@app.get("/api/config")
+@app.get("/api/runtime-config")
 def get_runtime_config() -> dict:
     """Return tunables the frontend reads on boot.
+
+    Path is ``/api/runtime-config`` (not ``/api/config``) because the bento
+    ordering app already mounts ``GET /api/config`` for its own purposes
+    via ``app.include_router(config_api.router)``, and FastAPI's router
+    registration order lets the later one win — moving ours off the
+    colliding path avoids a silent shadow.
 
     Anything not set in the Render dashboard falls back to the documented
     default. The shape is stable; adding a new key is non-breaking.

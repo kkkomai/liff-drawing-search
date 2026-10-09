@@ -353,6 +353,8 @@
       // Pull runtime tunables (GPS interval, page title) before the user
       // hits the start button — otherwise the first sample would be on the
       // hard-coded default and only later ticks would use the env-var value.
+      // Path is /api/runtime-config (NOT /api/config) to avoid the bento
+      // ordering app's /api/config collision.
       loadConfig();
       loadLogs();
     }
@@ -360,7 +362,7 @@
     async function loadConfig(retry) {
       retry = retry || 0;
       try {
-        const r = await fetch(STATE.apiBase + '/api/config', {
+        const r = await fetch(STATE.apiBase + '/api/runtime-config', {
           headers: authHeaders(),
           cache: 'no-store',
         });

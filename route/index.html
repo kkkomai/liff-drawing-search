@@ -267,15 +267,17 @@
     function onAuthed() {
       document.getElementById('authWait').style.display = 'none';
       setStatus('接続済み', true);
-      // Pull map defaults from /api/config before ensureMap() runs, so the
-      // initial view follows the env var on the first paint.
+      // Pull map defaults from /api/runtime-config before ensureMap() runs,
+      // so the initial view follows the env var on the first paint.
+      // Path is /api/runtime-config (NOT /api/config) to avoid the bento
+      // ordering app's /api/config collision.
       loadConfig().then(() => loadLogs());
     }
 
     async function loadConfig(retry) {
       retry = retry || 0;
       try {
-        const r = await fetch(STATE.apiBase + '/api/config', {
+        const r = await fetch(STATE.apiBase + '/api/runtime-config', {
           headers: authHeaders(),
           cache: 'no-store',
         });
