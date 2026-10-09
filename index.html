@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261009guard</title>
-  <script>window.__v="20261009guard";</script>
+  <title>申請フォーム - v20261009retry</title>
+  <script>window.__v="20261009retry";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009guard)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009retry)</span></h1>
 
   <!-- LIFF guard: when this page is opened outside the LINE LIFF WebView
        (e.g. by typing the URL into a normal browser), the application is
@@ -1967,11 +1967,21 @@ liff.init({
           cache: 'no-store',
         });
         if (!r.ok) {
-          // 401/403/503 — the user is not on the employees master or LIFF
-          // verification is mis-configured. We still hand out a "guest"
-          // token-less credential bundle so the tabs can render; the server
-          // side will reject their writes, which is the desired outcome.
+          // 5xx is a server-side problem, almost always Render's first
+          // request after a cold-start (~50s boot). The user is not at
+          // fault and the situation is not stable — retry with a
+          // generous backoff before declaring auth failed.
+          //
+          // 4xx is a definitive response from the bento backend (401
+          // unauthenticated, 403 not on the employees master, 503 ID
+          // token verification disabled). Retry would not help, so show
+          // the reason and stop.
           var errBody = await r.text();
+          if (r.status >= 500 && retry < 5) {
+            log('authenticateWithBento: ' + r.status + ' (retry ' + (retry + 1) + '/5) ' + errBody.slice(0, 120), true);
+            setTimeout(function () { authenticateWithBento(retry + 1); }, 2000 * (retry + 1));
+            return;
+          }
           log('authenticateWithBento: ' + r.status + ' ' + errBody.slice(0, 200), true);
           window[AUTH_TOKEN_KEY] = null;
           window[AUTH_USER_KEY] = null;
