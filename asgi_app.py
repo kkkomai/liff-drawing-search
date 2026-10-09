@@ -506,6 +506,113 @@ async def delete_bike_log(log_id: str) -> JSONResponse:
 
 
 # --------------------------------------------------------------------------- #
+# Paid-leave API (mirrors /schedules and /bike-logs).
+#
+# Same pattern as the other employee-facing tables: Postgres when
+# DATABASE_URL is set, else a JSON file in the working directory. The
+# /paid-leave prefix is listed in _PROTECTED_PREFIXES so the
+# employees-table auth gate rejects unauthenticated requests with 401.
+# --------------------------------------------------------------------------- #
+
+
+def _paid_leave_from_payload(data: dict) -> dict:
+    date = str(data.get("date", "")).strip()
+    type_ = str(data.get("type", "")).strip()
+    if not date:
+        raise HTTPException(status_code=400, detail="date is required")
+    return {
+        "id": str(uuid.uuid4()),
+        "date": date,
+        "type": type_,
+        "reason": str(data.get("reason", "")).strip(),
+        "created": datetime.now(JST).strftime("%Y-%m-%dT%H:%M:%S+0900"),
+    }
+
+
+# Lazy import: paid_db.py is only meaningful when DATABASE_URL is set. The
+# JSON-file path does not need it. Both branches still share the request
+# shape above.
+def _load_paid_leaves() -> list[dict]:
+    if USE_POSTGRES:
+        from paid_db import list_paid_leaves  # type: ignore
+        return list_paid_leaves()
+    try:
+        with (BASE_DIR / "paid_leaves.json").open("r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def _append_paid_leave(entry: dict) -> None:
+    if USE_POSTGRES:
+        from paid_db import insert_paid_leave  # type: ignore
+        insert_paid_leave(entry)
+        return
+    rows = _load_paid_leaves()
+    rows.append(entry)
+    with (BASE_DIR / "paid_leaves.json").open("w", encoding="utf-8") as fh:
+        json.dump(rows, fh, ensure_ascii=False, indent=2)
+
+
+def _update_paid_leave(leave_id: str, updates: dict):
+    if USE_POSTGRES:
+        from paid_db import update_paid_leave  # type: ignore
+        return update_paid_leave(leave_id, updates)
+    rows = _load_paid_leaves()
+    for idx, r in enumerate(rows):
+        if r.get("id") == leave_id:
+            current = dict(r)
+            for key in ("date", "type", "reason"):
+                if key in updates and updates[key] is not None:
+                    current[key] = str(updates[key])
+            rows[idx] = current
+            with (BASE_DIR / "paid_leaves.json").open("w", encoding="utf-8") as fh:
+                json.dump(rows, fh, ensure_ascii=False, indent=2)
+            return current
+    return None
+
+
+def _delete_paid_leave(leave_id: str) -> bool:
+    if USE_POSTGRES:
+        from paid_db import delete_paid_leave  # type: ignore
+        return delete_paid_leave(leave_id)
+    rows = _load_paid_leaves()
+    kept = [r for r in rows if r.get("id") != leave_id]
+    if len(kept) == len(rows):
+        return False
+    with (BASE_DIR / "paid_leaves.json").open("w", encoding="utf-8") as fh:
+        json.dump(kept, fh, ensure_ascii=False, indent=2)
+    return True
+
+
+@app.get("/paid-leave")
+def get_paid_leaves() -> dict:
+    return {"leaves": _load_paid_leaves()}
+
+
+@app.post("/paid-leave")
+async def create_paid_leave(payload: dict = Body(...)) -> JSONResponse:
+    entry = _paid_leave_from_payload(payload)
+    _append_paid_leave(entry)
+    return JSONResponse(status_code=201, content={"success": True, "leave": entry})
+
+
+@app.put("/paid-leave/{leave_id}")
+async def update_paid_leave_route(leave_id: str, payload: dict = Body(...)) -> JSONResponse:
+    updated = _update_paid_leave(leave_id, payload)
+    if not updated:
+        return JSONResponse(status_code=404, content={"success": False, "error": "not found"})
+    return JSONResponse(content={"success": True, "leave": updated})
+
+
+@app.delete("/paid-leave/{leave_id}")
+async def delete_paid_leave_route(leave_id: str) -> JSONResponse:
+    if _delete_paid_leave(leave_id):
+        return JSONResponse(content={"success": True, "message": "Paid leave deleted"})
+    return JSONResponse(status_code=404, content={"success": False, "error": "not found"})
+
+
+# --------------------------------------------------------------------------- #
 # bento ordering API (mounted last so it never shadows the routes above)
 # --------------------------------------------------------------------------- #
 
@@ -605,6 +712,65 @@ app.add_middleware(
 )
 
 # --------------------------------------------------------------------------- #
+# Security headers.
+#
+# The app runs inside the LINE LIFF WebView on the user's phone, so the
+# usual web hardening still applies — anyone can hit the URL directly and
+# anyone can try to embed it. These headers do not fix the auth boundary
+# (that is the employees-table gate below) but they prevent the most
+# common escalation paths an attacker would try first.
+#
+# - X-Frame-Options / frame-ancestors: deny embedding in a hostile iframe.
+#   ``liff.line.me`` is whitelisted because the LINE WebView is itself a
+#   frame, and the rest of the CSP / X-Frame-Options policy must allow
+#   that single legitimate ancestor.
+# - X-Content-Type-Options: nosniff: stop MIME guessing.
+# - Referrer-Policy: no-referrer: we never need to leak the LIFF URL to
+#   external tile / CDN hosts.
+# - Permissions-Policy: geolocation=(self) is what the bike tab needs;
+#   everything else (camera, microphone, payment) is denied because the
+#   app does not use them. ``self`` covers the same-origin child frames
+#   the bike and route tabs live in.
+# - Content-Security-Policy: tighten the script and connect sources. The
+#   only outbound calls are /api/*, the LIFF SDK, Leaflet via unpkg, and
+#   OpenStreetMap tile servers.
+# --------------------------------------------------------------------------- #
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "geolocation=(self), camera=(), microphone=(), payment=()",
+    "X-Frame-Options": "ALLOW-FROM https://liff.line.me",
+    # Modern equivalent of X-Frame-Options, also respected by browsers
+    # that dropped the legacy header.
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.line-scripts.com https://static.line-scdn.net https://unpkg.com; "
+        "style-src 'self' 'unsafe-inline' https://unpkg.com; "
+        "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.tile.opentopomap.org; "
+        "connect-src 'self' https://liff.line.me https://api.line.me; "
+        "frame-src 'self' https://liff.line.me; "
+        "frame-ancestors https://liff.line.me; "
+        "font-src 'self' data:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    ),
+}
+
+
+@app.middleware("http")
+async def _security_headers_middleware(request, call_next):
+    response = await call_next(request)
+    for name, value in _SECURITY_HEADERS.items():
+        # Don't override headers a route set explicitly (e.g. Cache-Control
+        # on /bike-logs). ``X-Frame-Options`` is the only one we need to
+        # guarantee, so set it last and prefer the existing value if any.
+        if name == "X-Frame-Options" and "x-frame-options" in {k.lower() for k in response.headers.keys()}:
+            continue
+        response.headers[name] = value
+    return response
+
+# --------------------------------------------------------------------------- #
 # Employees-table access gate.
 #
 # Mirrors the rule /api/orders already enforces: the request must carry a
@@ -644,6 +810,7 @@ def _resolve_employee_or_401(request):
 _PROTECTED_PREFIXES = (
     "/schedules",
     "/bike-logs",
+    "/paid-leave",
     # /api/orders and /api/admin are already protected by their own deps.
 )
 
