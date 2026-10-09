@@ -840,7 +840,7 @@
         if (!log.polyline || log.polyline.length < 2) return;
         const layer = L.polyline(log.polyline, {
           color: '#94a3b8',
-          weight: 2,
+          weight: 3,
           opacity: 0.55,
         }).addTo(ROUTE.map);
         ROUTE.allLayers.set(log.id, layer);
@@ -857,9 +857,9 @@
       ROUTE.selectedId = logId;
       ROUTE.allLayers.forEach((layer, id) => {
         if (id === logId) {
-          layer.setStyle({ color: '#16a34a', weight: 5, opacity: 0.95 });
+          layer.setStyle({ color: '#16a34a', weight: 8, opacity: 0.95 });
         } else {
-          layer.setStyle({ color: '#cbd5e1', weight: 1, opacity: 0.4 });
+          layer.setStyle({ color: '#cbd5e1', weight: 2, opacity: 0.4 });
         }
       });
       if (ROUTE.startEndMarkers) {
@@ -870,12 +870,12 @@
         const start = log.polyline[0];
         const end = log.polyline[log.polyline.length - 1];
         const startMarker = L.circleMarker(start, {
-          radius: 7, color: '#16a34a', fillColor: '#fff', fillOpacity: 1, weight: 3,
+          radius: 9, color: '#16a34a', fillColor: '#fff', fillOpacity: 1, weight: 4,
         }).addTo(ROUTE.map);
         startMarker.addTo = () => startMarker;
         startMarker.bindTooltip = () => startMarker;
         const endMarker = L.circleMarker(end, {
-          radius: 7, color: '#dc2626', fillColor: '#fff', fillOpacity: 1, weight: 3,
+          radius: 9, color: '#dc2626', fillColor: '#fff', fillOpacity: 1, weight: 4,
         }).addTo(ROUTE.map);
         endMarker.addTo = () => endMarker;
         endMarker.bindTooltip = () => endMarker;
@@ -901,7 +901,7 @@
     function resetRouteView() {
       ROUTE.selectedId = null;
       ROUTE.allLayers.forEach((layer) => {
-        layer.setStyle({ color: '#94a3b8', weight: 2, opacity: 0.55 });
+        layer.setStyle({ color: '#94a3b8', weight: 3, opacity: 0.55 });
       });
       if (ROUTE.startEndMarkers) {
         ROUTE.startEndMarkers.forEach(m => ROUTE.map.removeLayer(m));
