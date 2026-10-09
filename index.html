@@ -76,6 +76,71 @@
     .paid-history-reason { font-size: 12px; color: #888; margin-top: 2px; white-space: pre-wrap; }
     .paid-history-del { background: #e74c3c; color: #fff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
+    /* Weather tab (inlined). Mirrors the styling from the previous
+       /weather/ iframe so the inlined version looks identical. */
+    .weather-scroller {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .weather-day-card {
+      flex: 0 0 110px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 8px;
+      text-align: center;
+      scroll-snap-align: start;
+      cursor: pointer;
+    }
+    .weather-day-card.today { border-color: #0284c7; border-width: 2px; }
+    .weather-day-card.selected {
+      border-color: #0284c7;
+      border-width: 2px;
+      background: #e0f2fe;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+      transform: translateY(-2px);
+    }
+    .weather-day-card .date { font-size: 11px; color: #64748b; }
+    .weather-day-card .weekday { font-size: 13px; font-weight: 700; }
+    .weather-day-card .icon { font-size: 32px; line-height: 1.2; }
+    .weather-day-card .temps { font-size: 14px; font-weight: 600; }
+    .weather-day-card .max { color: #dc2626; }
+    .weather-day-card .min { color: #2563eb; }
+    .weather-day-card .rain { font-size: 11px; color: #64748b; }
+    .weather-day-card .wind { font-size: 11px; }
+    .weather-day-card .verdict {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .verdict-good { background: #16a34a; }
+    .verdict-warn { background: #f59e0b; }
+    .verdict-bad { background: #dc2626; }
+    .current-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .current-cell { background: #f1f5f9; border-radius: 8px; padding: 10px; }
+    .current-cell .label { font-size: 11px; color: #64748b; }
+    .current-cell .value { font-size: 22px; font-weight: 700; }
+    .current-cell .unit { font-size: 11px; color: #64748b; margin-left: 2px; }
+    .current-icon { font-size: 56px; line-height: 1; }
+    .current-summary { text-align: center; }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 13px;
+    }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-row .label { color: #64748b; }
+    .detail-row .value { font-weight: 600; }
+
     /* Image fullscreen overlay */
     #img-fullscreen-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.9); z-index: 9999; display: none; align-items: center; justify-content: center; }
     #img-fullscreen-overlay img { max-width: 95vw; max-height: 95vh; object-fit: contain; border-radius: 8px; box-shadow: 0 4px 20px rgba(255, 255, 255, 0.3); }
@@ -310,12 +375,18 @@
   </div>
 
   <div class="tab-content" id="tab-weather">
-    <!-- Weather forecast tab. 16-day forecast for the rider's current
-         location, served by the server's /api/weather proxy (which
-         caches Open-Meteo responses in-memory for 6 hours by default). -->
-    <iframe id="weather-frame" title="天気予報"
-            style="width:100%;height:900px;min-height:900px;border:0;display:block;background:#f5f6f8;"
-            data-src="weather/index.html?embedded=1"></iframe>
+    <!-- Weather forecast tab. Inlined directly into the host page
+         (not an iframe) because navigator.geolocation hangs silently
+         inside iframes on iOS LINE WebView — the OS prompt never
+         appears and the success callback never fires. The page
+         contents are rendered by loadWeatherTab() below; the static
+         markup is just a placeholder. -->
+    <div id="weather-root">
+      <div class="card">
+        <h2>天気予報</h2>
+        <div class="empty" id="weather-status">読み込み中...</div>
+      </div>
+    </div>
   </div>
 
   <div class="editor-overlay" id="editor-overlay" style="display:none !important;">
@@ -371,7 +442,12 @@
       console.log('switchTab called: ' + tabName);
       if (tabName === 'bento') ensureBentoFrame();
       if (tabName === 'bike') ensureBikeFrame();
-      if (tabName === 'weather') ensureWeatherFrame();
+      if (tabName === 'weather') {
+        if (!weatherTabLoaded) {
+          weatherTabLoaded = true;
+          loadWeatherTab();
+        }
+      }
       if (tabName === 'paid' && typeof loadPaidHistories === 'function') {
         try { loadPaidHistories(); } catch (e) { log('loadPaidHistories failed: ' + e.message, true); }
       }
@@ -560,76 +636,265 @@
         sendBikeCredentials();
         return;
       }
-      if (ev.data.type === 'weather-ready') {
-        log('weather iframe requested credentials');
-        sendWeatherCredentials();
-        return;
-      }
     });
 
-    // === WEATHER TAB (16-day forecast via /api/weather) ===
-    var weatherRetryTimer = null;
-    var WEATHER_MAX_RETRIES = 200;
-    var weatherRetries = 0;
+    // === WEATHER TAB (inlined, not iframe) ===
+    // We render the forecast directly into the host page instead of an
+    // iframe because navigator.geolocation silently hangs inside iframes
+    // on iOS LINE WebView — the OS prompt never appears. Hosting the
+    // page in the top-level LIFF document restores the normal geolocation
+    // flow (prompt, accept/deny, callback).
+    var WEATHER_DEFAULT = { latitude: 35.0116, longitude: 135.7681 };
+    var weatherTabLoaded = false;
+    var weatherData = null;
 
-    function ensureWeatherFrame() {
-      var frame = document.getElementById('weather-frame');
-      if (!frame) return;
-      if (frame.dataset.loaded !== '1') {
-        // weather lives on the same origin as the host (this server
-        // serves /weather/), so no apiBase override is needed; the
-        // child reads its own location.
-        frame.src = frame.dataset.src;
-        frame.dataset.loaded = '1';
-        log('ensureWeatherFrame: loading ' + frame.src);
-      }
-      sendWeatherCredentials();
-    }
+    function loadWeatherTab() {
+      // Render the tab skeleton. The "now loading" state gives the user
+      // immediate feedback even before geolocation resolves.
+      var root = document.getElementById('weather-root');
+      if (!root) return;
+      root.innerHTML =
+        '<div class="card">' +
+          '<h2 id="weather-status-h">現在地の天気</h2>' +
+          '<div id="weather-current"></div>' +
+        '</div>' +
+        '<div class="card">' +
+          '<h2>今後16日</h2>' +
+          '<div class="weather-scroller" id="weather-daily"></div>' +
+        '</div>' +
+        '<div class="card" id="weather-detail-card" style="display:none;">' +
+          '<h2 id="weather-detail-title">-- の時間帯別</h2>' +
+          '<div id="weather-detail-body"></div>' +
+        '</div>';
 
-    function sendWeatherCredentials() {
-      var frame = document.getElementById('weather-frame');
-      if (!frame || !frame.contentWindow) return;
-      var cred = buildLiffCredentials();
-      if (!cred.lineUserId) {
-        diag('3d. 天気予報', 'userId 未取得（リトライ中）');
-        scheduleWeatherCredentials();
+      // Trigger geolocation immediately. Hard fallback after 8s so a
+      // hung prompt cannot trap the user on "取得中...".
+      var fired = false;
+      var fallback = setTimeout(function () {
+        if (fired) return;
+        fired = true;
+        document.getElementById('weather-status-h').textContent = '現在地の天気（草津駅の固定値）';
+        fetchWeather(WEATHER_DEFAULT.latitude, WEATHER_DEFAULT.longitude);
+      }, 8000);
+
+      if (!navigator.geolocation) {
+        clearTimeout(fallback);
+        fired = true;
+        document.getElementById('weather-status-h').textContent = '現在地の天気（位置情報未対応、草津駅の固定値）';
+        fetchWeather(WEATHER_DEFAULT.latitude, WEATHER_DEFAULT.longitude);
         return;
       }
-      var payload = {
-        type: 'weather-credentials',
-        lineUserId: cred.lineUserId,
-        idToken: cred.idToken,
-        authToken: getAuthToken(),
-        apiBase: window.location.origin,
-      };
-      frame.contentWindow.postMessage(payload, window.location.origin);
-      log('sendWeatherCredentials: sent to weather iframe');
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          if (fired) return;
+          fired = true;
+          clearTimeout(fallback);
+          fetchWeather(pos.coords.latitude, pos.coords.longitude);
+        },
+        function (err) {
+          if (fired) return;
+          fired = true;
+          clearTimeout(fallback);
+          document.getElementById('weather-status-h').textContent = '現在地の天気（取得失敗、草津駅の固定値）';
+          fetchWeather(WEATHER_DEFAULT.latitude, WEATHER_DEFAULT.longitude);
+        },
+        { enableHighAccuracy: false, maximumAge: 30 * 60 * 1000, timeout: 6000 }
+      );
     }
 
-    function scheduleWeatherCredentials() {
-      if (weatherRetryTimer) return;
-      if (weatherRetries >= WEATHER_MAX_RETRIES) {
-        log('sendWeatherCredentials: giving up after ' + weatherRetries + ' retries', true);
-        try {
-          var stuck = document.getElementById('weather-frame');
-          if (stuck && stuck.contentWindow) {
-            stuck.contentWindow.postMessage({
-              type: 'weather-auth-error',
-              message: whyLiffUnavailable(),
-            }, window.location.origin);
+    function fetchWeather(lat, lng) {
+      // The /api/weather endpoint is not auth-gated (it is a public
+      // proxy), so we send only the position query. The host page's
+      // /schedules and /bike-logs still require a Bearer token; weather
+      // does not, and adding an Authorization header here would only
+      // muddle the failure mode if a 401 ever appeared.
+      var url = '/api/weather?lat=' + encodeURIComponent(lat) + '&lng=' + encodeURIComponent(lng);
+      fetch(url, { cache: 'no-store' })
+        .then(function (r) {
+          return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; });
+        })
+        .then(function (resp) {
+          if (!resp.ok) {
+            var detail = (resp.j && (resp.j.detail || (resp.j.detail && resp.j.detail.message))) || JSON.stringify(resp.j);
+            throw new Error('HTTP ' + resp.status + ' ' + detail);
           }
-        } catch (e) {
-          log('sendWeatherCredentials: could not deliver auth error: ' + e.message, true);
-        }
-        return;
-      }
-      weatherRetries++;
-      weatherRetryTimer = setTimeout(function () {
-        weatherRetryTimer = null;
-        sendWeatherCredentials();
-      }, 300);
+          weatherData = resp.j;
+          renderWeather(weatherData, lat, lng);
+        })
+        .catch(function (e) {
+          document.getElementById('weather-current').innerHTML =
+            '<div class="empty" style="color:var(--bad);">天気予報を取得できませんでした: ' + (e.message || e) + '</div>';
+        });
     }
-    function resetWeatherCredentials() { weatherRetries = 0; }
+
+    var WMO_CODES = (function () {
+      var m = {};
+      m[0] = { icon: '☀️', label: '快晴' };
+      m[1] = { icon: '🌤️', label: '晴れ' };
+      m[2] = { icon: '⛅', label: '曇り時々晴' };
+      m[3] = { icon: '☁️', label: '曇り' };
+      [45, 48].forEach(function (c) { m[c] = { icon: '🌫️', label: '霧' }; });
+      [51, 53, 55].forEach(function (c) { m[c] = { icon: '🌦️', label: '霧雨' }; });
+      [56, 57].forEach(function (c) { m[c] = { icon: '🌧️', label: '凍る霧雨' }; });
+      [61, 63, 65].forEach(function (c) { m[c] = { icon: '🌧️', label: '雨' }; });
+      [66, 67].forEach(function (c) { m[c] = { icon: '🌧️', label: '凍る雨' }; });
+      [71, 73, 75].forEach(function (c) { m[c] = { icon: '🌨️', label: '雪' }; });
+      m[77] = { icon: '🌨️', label: 'ひょう' };
+      [80, 81, 82].forEach(function (c) { m[c] = { icon: '🌦️', label: 'にわか雨' }; });
+      [85, 86].forEach(function (c) { m[c] = { icon: '🌨️', label: 'にわか雪' }; });
+      m[95] = { icon: '⛈️', label: '雷雨' };
+      [96, 99].forEach(function (c) { m[c] = { icon: '⛈️', label: '雷雨(雹)' }; });
+      return m;
+    })();
+    function wmoLookup(code) {
+      return WMO_CODES[code] || { icon: '🌡️', label: '不明' };
+    }
+    function degToCompass(deg) {
+      if (deg == null) return '';
+      var dirs = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'];
+      return dirs[Math.round(((deg % 360) / 45)) % 8];
+    }
+    function rideVerdict(day) {
+      var rain = day.precipitation_probability_max || 0;
+      var wind = day.wind_speed_10m_max || 0;
+      if (rain >= 60 || wind >= 8 || (day.weather_code >= 61 && day.weather_code <= 99)) {
+        return { cls: 'verdict-bad', label: '× 困難' };
+      }
+      if (rain >= 30 || wind >= 5) {
+        return { cls: 'verdict-warn', label: '△ 風雨注意' };
+      }
+      return { cls: 'verdict-good', label: '◎ 良好' };
+    }
+    function escHtml(s) {
+      return String(s == null ? '' : s).replace(/[<>&"']/g, function (c) {
+        return { '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;' }[c];
+      });
+    }
+
+    function renderWeather(j, lat, lng) {
+      var f = j.forecast || {};
+      var c = f.current || {};
+      var d = f.daily || {};
+      var d0 = {
+        code: (c.weather_code !== undefined) ? c.weather_code : (d.weather_code ? d.weather_code[0] : 0),
+        temp: c.temperature_2m,
+        wind: c.wind_speed_10m,
+        windDir: c.wind_direction_10m,
+        rain: (d.precipitation_probability_max && d.precipitation_probability_max[0] !== undefined)
+              ? d.precipitation_probability_max[0] : null,
+      };
+      var w = wmoLookup(d0.code);
+      var currentHtml =
+        '<div class="current-grid">' +
+          '<div class="current-cell current-summary">' +
+            '<div class="current-icon">' + w.icon + '</div>' +
+            '<div>' + escHtml(w.label) + '</div>' +
+          '</div>' +
+          '<div>' +
+            '<div class="current-cell" style="margin-bottom:8px;">' +
+              '<div class="label">気温 / 風速</div>' +
+              '<div class="value">' + (d0.temp != null ? d0.temp.toFixed(1) : '--') + '<span class="unit">℃</span></div>' +
+              '<div class="value" style="font-size:14px;">' + (d0.wind != null ? d0.wind.toFixed(1) : '--') + '<span class="unit">m/s</span>' +
+              (d0.windDir != null ? ' (' + degToCompass(d0.windDir) + ')' : '') + '</div>' +
+            '</div>' +
+            '<div class="current-cell">' +
+              '<div class="label">降水 / 位置</div>' +
+              '<div class="value" style="font-size:14px;">' + (d0.rain != null ? d0.rain : '--') + '<span class="unit">%</span></div>' +
+              '<div class="value" style="font-size:11px;color:var(--muted);">' + lat.toFixed(3) + ', ' + lng.toFixed(3) + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      document.getElementById('weather-current').innerHTML = currentHtml;
+
+      // Daily scroller.
+      var times = d.time || [];
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+      var dailyHtml = '';
+      for (var i = 0; i < times.length; i++) {
+        var dt = new Date(times[i] + 'T00:00:00');
+        var isToday = dt.getTime() === today.getTime();
+        var day = {
+          weather_code: (d.weather_code || [])[i],
+          temperature_2m_max: (d.temperature_2m_max || [])[i],
+          temperature_2m_min: (d.temperature_2m_min || [])[i],
+          precipitation_probability_max: (d.precipitation_probability_max || [])[i],
+          wind_speed_10m_max: (d.wind_speed_10m_max || [])[i],
+        };
+        var ww = wmoLookup(day.weather_code);
+        var v = rideVerdict(day);
+        dailyHtml +=
+          '<div class="weather-day-card' + (isToday ? ' today' : '') + '" data-idx="' + i + '">' +
+            '<div class="date">' + (dt.getMonth() + 1) + '/' + dt.getDate() + '</div>' +
+            '<div class="weekday">' + (isToday ? '今日' : weekdays[dt.getDay()]) + '</div>' +
+            '<div class="icon">' + ww.icon + '</div>' +
+            '<div class="temps"><span class="max">' + (day.temperature_2m_max != null ? Math.round(day.temperature_2m_max) : '?') + '°</span> / <span class="min">' + (day.temperature_2m_min != null ? Math.round(day.temperature_2m_min) : '?') + '°</span></div>' +
+            '<div class="rain">☔ ' + (day.precipitation_probability_max != null ? day.precipitation_probability_max : '?') + '%</div>' +
+            '<div class="wind">💨 ' + (day.wind_speed_10m_max != null ? day.wind_speed_10m_max.toFixed(1) : '?') + ' m/s</div>' +
+            '<div class="verdict ' + v.cls + '">' + v.label + '</div>' +
+          '</div>';
+      }
+      document.getElementById('weather-daily').innerHTML = dailyHtml;
+      // Wire up click handlers.
+      var cards = document.querySelectorAll('.weather-day-card');
+      for (var k = 0; k < cards.length; k++) {
+        (function (idx) {
+          cards[k].addEventListener('click', function () { renderWeatherDetail(idx); });
+        })(k);
+      }
+      // Default: show today's hourly detail.
+      if (times.length) renderWeatherDetail(0);
+    }
+
+    function renderWeatherDetail(i) {
+      var f = (weatherData && weatherData.forecast) || {};
+      var d = f.daily || {};
+      var h = f.hourly || {};
+      var time = (d.time || [])[i];
+      if (!time) return;
+      // Highlight the selected card and scroll it into view.
+      var cards = document.querySelectorAll('.weather-day-card');
+      for (var k = 0; k < cards.length; k++) {
+        cards[k].classList.toggle('selected', k === i);
+      }
+      var target = document.querySelector('.weather-day-card[data-idx="' + i + '"]');
+      if (target && target.scrollIntoView) {
+        target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      }
+      var dt = new Date(time + 'T00:00:00');
+      var weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var isToday = dt.getTime() === today.getTime();
+      var titleText = (isToday ? '今日 ' : '') + (dt.getMonth() + 1) + '/' + dt.getDate() + ' (' + weekdays[dt.getDay()] + ')';
+      document.getElementById('weather-detail-title').textContent = titleText + ' の時間帯別';
+      var hourlyTimes = h.time || [];
+      var rows = [];
+      for (var j = 0; j < hourlyTimes.length; j++) {
+        var ht = new Date(hourlyTimes[j]);
+        if (ht.getFullYear() !== dt.getFullYear() || ht.getMonth() !== dt.getMonth() || ht.getDate() !== dt.getDate()) continue;
+        rows.push({ hour: ht.getHours(), temp: h.temperature_2m[j], rain: h.precipitation_probability[j], wind: h.wind_speed_10m[j], code: h.weather_code[j] });
+      }
+      var body = '';
+      for (var hh = 0; hh < 24; hh += 3) {
+        var slice = rows.filter(function (r) { return r.hour >= hh && r.hour < hh + 3; });
+        if (!slice.length) continue;
+        var tempAvg = 0; for (var s = 0; s < slice.length; s++) tempAvg += (slice[s].temp || 0); tempAvg /= slice.length;
+        var rainMax = 0; for (var s = 0; s < slice.length; s++) rainMax = Math.max(rainMax, slice[s].rain || 0);
+        var windMax = 0; for (var s = 0; s < slice.length; s++) windMax = Math.max(windMax, slice[s].wind || 0);
+        var codeMid = slice[Math.floor(slice.length / 2)].code;
+        var ww = wmoLookup(codeMid);
+        var verdict = (rainMax >= 60 || windMax >= 8) ? '×' : (rainMax >= 30 || windMax >= 5) ? '△' : '◎';
+        body += '<div class="detail-row">' +
+          '<span class="label">' + ('0' + hh).slice(-2) + ':00 ' + ww.icon + ' ' + ww.label + ' ' + verdict + '</span>' +
+          '<span class="value">' +
+            (tempAvg != null ? tempAvg.toFixed(1) + '℃' : '--') +
+            ' / ☔' + Math.round(rainMax) + '%' +
+            ' / 💨' + windMax.toFixed(1) + 'm/s' +
+          '</span></div>';
+      }
+      document.getElementById('weather-detail-body').innerHTML = body;
+      document.getElementById('weather-detail-card').style.display = '';
+    }
 
     // === BIKE TAB (same pattern as bento) ===
     var bikeRetryTimer = null;
@@ -2157,10 +2422,8 @@ liff.init({
         // Re-send credentials so child tabs receive the new authToken.
         resetBentoCredentials();
         resetBikeCredentials();
-        resetWeatherCredentials();
         sendBentoCredentials();
         sendBikeCredentials();
-        sendWeatherCredentials();
         // Re-fetch /schedules now that a Bearer token is available — the
         // initial loadSchedules() call issued before the token arrived
         // would have hit 401 and rendered an empty calendar. Now that we
