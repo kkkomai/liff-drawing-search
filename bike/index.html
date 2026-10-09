@@ -407,24 +407,43 @@
 
     async function loadLogs(retry) {
       retry = retry || 0;
+      let lastErr = '';
       try {
         const r = await fetch(STATE.apiBase + '/bike-logs', {
           headers: authHeaders(),
           cache: 'no-store',
         });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
+        if (!r.ok) {
+          // Read the body so we can show a concrete reason. Without this
+          // the user sees "HTTP 401" and cannot tell whether the issue is
+          // a missing employees-table entry, an expired session, a Render
+          // cold start, or something else entirely.
+          let body = '';
+          try { body = (await r.text()).slice(0, 240); } catch (e) { body = ''; }
+          throw new Error('HTTP ' + r.status + (body ? ' ' + body : ''));
+        }
         const j = await r.json();
         STATE.logs = j.logs || [];
         renderLogs();
         loadSummary();
+        return;
       } catch (e) {
+        lastErr = e.message || String(e);
         if (retry < 3) {
           await new Promise(res => setTimeout(res, 1000 * Math.pow(2, retry)));
           return loadLogs(retry + 1);
         }
         STATE.logs = [];
         renderLogs();
-        showToast('記録の読み込みに失敗: ' + e.message, true);
+        // Show the full error in the list area (toast disappears in 2.4s)
+        // and a short version in the toast, so the user has a chance to
+        // read either one.
+        const listEl = document.getElementById('logList');
+        if (listEl) {
+          listEl.innerHTML = '<div class="empty" style="color:var(--danger);white-space:pre-wrap;word-break:break-all;font-size:12px;">'
+            + '記録の読み込みに失敗しました。<br>詳細: ' + lastErr + '</div>';
+        }
+        showToast('記録の読み込みに失敗: ' + lastErr, true);
       }
     }
 
