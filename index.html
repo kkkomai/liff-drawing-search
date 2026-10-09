@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261009auth2</title>
-  <script>window.__v="20261009auth2";</script>
+  <title>申請フォーム - v20261009merged</title>
+  <script>window.__v="20261009merged";</script>
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +83,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009auth2)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009merged)</span></h1>
 
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen-overlay">
@@ -96,7 +96,6 @@
       <button id="tab-paid-btn" class="tab" data-tab="paid" ontouchstart="switchTab('paid')" onclick="switchTab('paid')">有給申請</button>
       <button id="tab-bento-btn" class="tab" data-tab="bento" ontouchstart="switchTab('bento')" onclick="switchTab('bento')">お弁当注文</button>
       <button id="tab-bike-btn" class="tab" data-tab="bike" ontouchstart="switchTab('bike')" onclick="switchTab('bike')">自転車ログ</button>
-      <button id="tab-route-btn" class="tab" data-tab="route" ontouchstart="switchTab('route')" onclick="switchTab('route')">ルート詳細</button>
     </div>
 
   <div class="tab-content active" id="tab-overtime">
@@ -213,17 +212,8 @@
          given a fixed pixel height — calc(100vh - Npx) collapses to 0
          inside the LINE WebView and the tab reads as a blank panel. -->
     <iframe id="bike-frame" title="自転車ログ"
-            style="width:100%;height:720px;min-height:720px;border:0;display:block;background:#f5f6f8;"
+            style="width:100%;height:820px;min-height:820px;border:0;display:block;background:#f5f6f8;"
             data-src="bike/index.html?embedded=1"></iframe>
-  </div>
-
-  <div class="tab-content" id="tab-route">
-    <!-- Route-detail tab. Read-only map of every saved bike log's polyline,
-         with a list grouped by month. Same postMessage credential handoff
-         as the bike tab because liff.init can only run in the host. -->
-    <iframe id="route-frame" title="ルート詳細"
-            style="width:100%;height:760px;min-height:760px;border:0;display:block;background:#f5f6f8;"
-            data-src="route/index.html?embedded=1"></iframe>
   </div>
 
   <div class="editor-overlay" id="editor-overlay" style="display:none !important;">
@@ -279,7 +269,9 @@
       console.log('switchTab called: ' + tabName);
       if (tabName === 'bento') ensureBentoFrame();
       if (tabName === 'bike') ensureBikeFrame();
-      if (tabName === 'route') ensureRouteFrame();
+      if (tabName === 'paid' && typeof loadPaidHistories === 'function') {
+        try { loadPaidHistories(); } catch (e) { log('loadPaidHistories failed: ' + e.message, true); }
+      }
     }
 
     // === BENTO TAB (iframe + postMessage credential handoff) ===
@@ -465,77 +457,7 @@
         sendBikeCredentials();
         return;
       }
-      if (ev.data.type === 'route-ready') {
-        log('route iframe requested credentials');
-        sendRouteCredentials();
-        return;
-      }
     });
-
-    // === ROUTE TAB (read-only map of saved polylines) ===
-    var routeRetryTimer = null;
-    var ROUTE_MAX_RETRIES = 200;
-    var routeRetries = 0;
-
-    function ensureRouteFrame() {
-      var frame = document.getElementById('route-frame');
-      if (!frame) return;
-      if (frame.dataset.loaded !== '1') {
-        // route lives on the same origin as the host (this server serves
-        // /route/), so no apiBase override is needed; the child reads its
-        // own location.
-        frame.src = frame.dataset.src;
-        frame.dataset.loaded = '1';
-        log('ensureRouteFrame: loading ' + frame.src);
-      }
-      sendRouteCredentials();
-    }
-
-    function sendRouteCredentials() {
-      var frame = document.getElementById('route-frame');
-      if (!frame || !frame.contentWindow) return;
-      var cred = buildLiffCredentials();
-      if (!cred.lineUserId) {
-        diag('3c. ルート詳細', 'userId 未取得（リトライ中）');
-        scheduleRouteCredentials();
-        return;
-      }
-      var payload = {
-        type: 'route-credentials',
-        lineUserId: cred.lineUserId,
-        idToken: cred.idToken,
-        authToken: getAuthToken(),
-        apiBase: window.location.origin,
-      };
-      frame.contentWindow.postMessage(payload, window.location.origin);
-      log('sendRouteCredentials: sent to route iframe');
-    }
-
-    function scheduleRouteCredentials() {
-      if (routeRetryTimer) return;
-      if (routeRetries >= ROUTE_MAX_RETRIES) {
-        log('sendRouteCredentials: giving up after ' + routeRetries + ' retries', true);
-        try {
-          var stuck = document.getElementById('route-frame');
-          if (stuck && stuck.contentWindow) {
-            stuck.contentWindow.postMessage({
-              type: 'route-auth-error',
-              message: whyLiffUnavailable(),
-            }, window.location.origin);
-          }
-        } catch (e) {
-          log('sendRouteCredentials: could not deliver auth error: ' + e.message, true);
-        }
-        return;
-      }
-      routeRetries++;
-      routeRetryTimer = setTimeout(function () {
-        routeRetryTimer = null;
-        sendRouteCredentials();
-      }, 300);
-    }
-    function resetRouteCredentials() { routeRetries = 0; }
-
 
     // === BIKE TAB (same pattern as bento) ===
     var bikeRetryTimer = null;
@@ -1181,17 +1103,56 @@ var __el = document.getElementById('adjust-aspect');
     }
 
     // === PAID LEAVE HISTORY ===
+    // Server-backed since the employees-table auth gate. localStorage
+    // would let anyone on the device read/write the records, which is the
+    // opposite of what the rest of the tabs enforce.
     var paidHistories = [];
 
-    function loadPaidHistories() {
-        var histories = JSON.parse(localStorage.getItem('paidHistories') || '[]');
-        paidHistories = histories;
-        renderPaidHistories();
+    function paidHeaders() {
+        var h = { 'Content-Type': 'application/json' };
+        var tok = getAuthToken();
+        if (tok) h['Authorization'] = 'Bearer ' + tok;
+        return h;
     }
 
-    function savePaidHistories() {
-        localStorage.setItem('paidHistories', JSON.stringify(paidHistories));
-        renderPaidHistories();
+    function loadPaidHistories(retry) {
+        retry = retry || 0;
+        if (!getAuthToken()) {
+            var tries = 0;
+            var wait = setInterval(function () {
+                if (getAuthToken() || ++tries >= 15) {
+                    clearInterval(wait);
+                    loadPaidHistories(retry);
+                }
+            }, 500);
+            return;
+        }
+        fetch('/paid-leave', { headers: paidHeaders(), cache: 'no-store' })
+            .then(function (resp) {
+                if (!resp.ok) {
+                    log('loadPaidHistories: HTTP ' + resp.status, true);
+                    paidHistories = [];
+                    renderPaidHistories();
+                    return null;
+                }
+                return resp.json();
+            })
+            .then(function (data) {
+                if (data && Array.isArray(data.leaves)) {
+                    paidHistories = data.leaves;
+                    log('Paid histories loaded: ' + paidHistories.length);
+                } else {
+                    paidHistories = [];
+                }
+                renderPaidHistories();
+            })
+            .catch(function (err) {
+                if (retry < 2) {
+                    setTimeout(function () { loadPaidHistories(retry + 1); }, 1000);
+                } else {
+                    log('loadPaidHistories error: ' + err.message, true);
+                }
+            });
     }
 
     function renderPaidHistories() {
@@ -1202,7 +1163,7 @@ var __el = document.getElementById('adjust-aspect');
             return;
         }
         historiesDiv.innerHTML = '';
-        paidHistories.slice().reverse().forEach(function(h, idx) {
+        paidHistories.forEach(function (h) {
             var item = document.createElement('div');
             item.className = 'paid-history-item';
             var info = document.createElement('div');
@@ -1224,11 +1185,8 @@ var __el = document.getElementById('adjust-aspect');
             var delBtn = document.createElement('button');
             delBtn.className = 'paid-history-del';
             delBtn.textContent = '削除';
-            delBtn.onclick = function(e) {
-                if (confirm('削除しますか？')) {
-                    paidHistories.splice(paidHistories.length - 1 - idx, 1);
-                    savePaidHistories();
-                }
+            delBtn.onclick = function () {
+                if (confirm('削除しますか？')) { deletePaidHistory(h.id); }
             };
             item.appendChild(info);
             item.appendChild(delBtn);
@@ -1236,19 +1194,52 @@ var __el = document.getElementById('adjust-aspect');
         });
     }
 
+    function deletePaidHistory(id) {
+        fetch('/paid-leave/' + encodeURIComponent(id), {
+            method: 'DELETE',
+            headers: paidHeaders(),
+        }).then(function (resp) {
+            if (resp.ok) {
+                showToast('削除しました');
+                loadPaidHistories();
+            } else {
+                showToast('削除失敗: HTTP ' + resp.status, true);
+            }
+        }).catch(function (err) {
+            showToast('削除失敗: ' + err.message, true);
+        });
+    }
+
     var paidSubmitBtn = document.getElementById('paid-submit');
     if (paidSubmitBtn) {
-        paidSubmitBtn.onclick = function() {
+        paidSubmitBtn.onclick = function () {
             var date = document.getElementById('paid-date').value;
             var type = document.getElementById('paid-type').value;
             var reason = document.getElementById('paid-reason').value.trim();
             if (!date) { alert('日付を選択してください'); return; }
-            paidHistories.push({ date: date, type: type, reason: reason });
-            savePaidHistories();
-            alert('有休申請を送信しました');
-            // Clear form
-            document.getElementById('paid-date').value = '';
-            document.getElementById('paid-reason').value = '';
+            if (!getAuthToken()) {
+                alert('認証中です。しばらくしてから再度お試しください。');
+                return;
+            }
+            paidSubmitBtn.disabled = true;
+            fetch('/paid-leave', {
+                method: 'POST',
+                headers: paidHeaders(),
+                body: JSON.stringify({ date: date, type: type, reason: reason }),
+            }).then(function (resp) {
+                paidSubmitBtn.disabled = false;
+                if (resp.ok) {
+                    document.getElementById('paid-date').value = '';
+                    document.getElementById('paid-reason').value = '';
+                    showToast('有休申請を送信しました');
+                    loadPaidHistories();
+                } else {
+                    showToast('送信失敗: HTTP ' + resp.status, true);
+                }
+            }).catch(function (err) {
+                paidSubmitBtn.disabled = false;
+                showToast('送信失敗: ' + err.message, true);
+            });
         };
     }
 
@@ -1628,8 +1619,31 @@ var __el = document.getElementById('adjust-aspect');
 
     function loadSchedules(callback) {
         log('Loading schedules...');
-        fetch("/schedules")
-            .then(function(resp) { return resp.json(); })
+        // The auth token arrives via /api/auth/login asynchronously after
+        // liff.init. Poll briefly for it instead of issuing a request that
+        // would 401 the moment the user opens the page. 15 attempts ×
+        // 500ms = 7.5s, which is well within the host's auth budget.
+        if (!getAuthToken()) {
+            var tries = 0;
+            var wait = setInterval(function () {
+                if (getAuthToken() || ++tries >= 15) {
+                    clearInterval(wait);
+                    loadSchedules(callback);
+                }
+            }, 500);
+            return;
+        }
+        var headers = { 'Authorization': 'Bearer ' + getAuthToken() };
+        fetch("/schedules", { headers: headers, cache: 'no-store' })
+            .then(function(resp) {
+                if (!resp.ok) {
+                    log('loadSchedules: HTTP ' + resp.status + ' (auth may be required)', true);
+                    allSchedules = [];
+                    if (callback) callback();
+                    return null;
+                }
+                return resp.json();
+            })
             .then(function(data) {
                 if (data && Array.isArray(data.schedules)) {
                     allSchedules = data.schedules;
@@ -1675,9 +1689,13 @@ var __el = document.getElementById('adjust-aspect');
                 ? "/schedules/" + currentEditId
                 : "/schedules";
 
+            var headers = { "Content-Type": "application/json" };
+            var tok = getAuthToken();
+            if (tok) headers['Authorization'] = 'Bearer ' + tok;
+
             fetch(url, {
                 method: method,
-                headers: { "Content-Type": "application/json" },
+                headers: headers,
                 body: JSON.stringify({ title: title || "残業", date: date, time: timeVal, description: description })
             })
             .then(function(resp) { return resp.json(); })
@@ -1714,7 +1732,10 @@ var __el = document.getElementById('adjust-aspect');
     }
 
     function deleteSchedule(id) {
-        fetch("/schedules/" + id, { method: "DELETE" })
+        var headers = {};
+        var tok = getAuthToken();
+        if (tok) headers['Authorization'] = 'Bearer ' + tok;
+        fetch("/schedules/" + id, { method: "DELETE", headers: headers })
             .then(function(resp) { return resp.json(); })
             .then(function(data) {
                 log('Schedule deleted');
@@ -1890,10 +1911,18 @@ liff.init({
         // Re-send credentials so child tabs receive the new authToken.
         resetBentoCredentials();
         resetBikeCredentials();
-        resetRouteCredentials();
         sendBentoCredentials();
         sendBikeCredentials();
-        sendRouteCredentials();
+        // Re-fetch /schedules now that a Bearer token is available — the
+        // initial loadSchedules() call issued before the token arrived
+        // would have hit 401 and rendered an empty calendar. Now that we
+        // have credentials, refresh the host's own data too.
+        if (tok && typeof loadSchedules === 'function') {
+          try { loadSchedules(); } catch (e) { log('refresh loadSchedules failed: ' + e.message, true); }
+        }
+        if (tok && typeof loadPaidHistories === 'function') {
+          try { loadPaidHistories(); } catch (e) { log('refresh loadPaidHistories failed: ' + e.message, true); }
+        }
       } catch (e) {
         log('authenticateWithBento: ' + e.message, true);
         if (retry < 3) {

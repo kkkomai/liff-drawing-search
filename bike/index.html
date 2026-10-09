@@ -169,6 +169,80 @@
     }
     .toast.show { opacity: 1; }
     .toast.error { background: #b91c1c; }
+    /* Mode tabs at the top of the page: switch between the new-record
+       form and the read-only route-detail map. */
+    .mode-tabs {
+      display: flex;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+    }
+    .mode-tab {
+      flex: 1;
+      padding: 10px 12px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .mode-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    /* Route-detail view: stats row + map + list. */
+    .route-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .route-stats .stat {
+      text-align: center;
+      padding: 8px 4px;
+      background: #f1f5f9;
+      border-radius: 6px;
+    }
+    .route-stats .stat .v { font-size: 16px; font-weight: 700; color: var(--fg); }
+    .route-stats .stat .u { font-size: 10px; color: var(--muted); }
+    .route-stats .stat.empty .v { color: var(--muted); font-weight: 400; font-size: 13px; }
+    .route-map {
+      width: 100%;
+      height: 280px;
+      background: #e2e8f0;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+    .list-wrap {
+      max-height: 360px;
+      overflow-y: auto;
+    }
+    .month-label {
+      font-size: 12px;
+      color: var(--muted);
+      padding: 8px 4px 4px;
+      font-weight: 600;
+    }
+    .route-item {
+      border-top: 1px solid var(--border);
+      padding: 8px 4px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .route-item:first-of-type { border-top: none; }
+    .route-item:hover { background: #f1f5f9; }
+    .route-item.selected { background: var(--accent-soft); }
+    .route-item .info { flex: 1; min-width: 0; }
+    .route-item .date { font-weight: 600; font-size: 13px; }
+    .route-item .km { color: var(--accent); font-weight: 700; font-size: 13px; }
+    .route-item .meta { font-size: 12px; color: var(--muted); }
+    .route-item .title { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .route-item .no-gps { font-size: 11px; color: var(--danger); }
     .summary {
       display: flex;
       gap: 12px;
@@ -184,6 +258,15 @@
     <span>🚴 自転車ログ</span>
     <span class="badge" id="apiStatus">接続待機</span>
   </header>
+
+  <!-- Mode switch: 'record' for the new-entry form, 'routes' for the
+       read-only map of every saved log. The two views share the same
+       /bike-logs API and the same auth credentials; only the visible
+       section changes. -->
+  <div class="mode-tabs" id="modeTabs">
+    <button type="button" class="mode-tab active" data-mode="record">新規記録</button>
+    <button type="button" class="mode-tab" data-mode="routes">ルート詳細</button>
+  </div>
 
   <main>
     <div id="authWait" class="card" style="display:none;">
@@ -225,6 +308,23 @@
       </div>
       <div class="row" style="margin-top:12px;">
         <button class="primary" id="saveBtn">保存</button>
+      </div>
+    </div>
+
+    <div id="routeView" class="card" style="display:none;">
+      <h2>ルート詳細</h2>
+      <div id="routeStats" class="route-stats">
+        <div class="stat empty"><div class="v">-</div><div class="u">距離 (km)</div></div>
+        <div class="stat empty"><div class="v">-</div><div class="u">時間</div></div>
+        <div class="stat empty"><div class="v">-</div><div class="u">平均 (km/h)</div></div>
+        <div class="stat empty"><div class="v">-</div><div class="u">記録数</div></div>
+      </div>
+      <div style="display:flex; gap:6px; margin: 8px 0;">
+        <button type="button" class="ghost" id="routeResetBtn" disabled>全件表示</button>
+      </div>
+      <div id="routeMap" class="route-map"></div>
+      <div class="list-wrap" id="routeList">
+        <div class="empty">読み込み中...</div>
       </div>
     </div>
 
@@ -689,6 +789,241 @@
         (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
       document.getElementById('gpsSpd').textContent = spd.toFixed(1);
     }
+
+    // ---- Route-detail view (read-only map of saved polylines) ----
+    // Reuses the same /bike-logs fetch and the same auth headers. Lives
+    // in the same STATE so a fresh log saved in the form immediately
+    // shows up in the route view the next time the user switches tabs.
+    const ROUTE = {
+      map: null,
+      allLayers: new Map(),  // id -> L.Polyline
+      startEndMarkers: null,
+      selectedId: null,
+    };
+
+    function ensureRouteMap() {
+      if (ROUTE.map) return;
+      const center = (STATE.config && STATE.config.route_map_default_center) || [35.0116, 135.7681];
+      const zoom = (STATE.config && STATE.config.route_map_default_zoom) || 11;
+      const m = L.map('routeMap', { zoomControl: true }).setView(center, zoom);
+      m.setView = m.setView.bind(m);
+      m.fitBounds = m.fitBounds.bind(m);
+      m.removeLayer = m.removeLayer.bind(m);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap',
+        maxZoom: 19,
+      }).addTo(m);
+      ROUTE.map = m;
+    }
+
+    function drawAllRoutes() {
+      if (!ROUTE.map) return;
+      ROUTE.allLayers.forEach(layer => ROUTE.map.removeLayer(layer));
+      ROUTE.allLayers.clear();
+      const allBounds = [];
+      STATE.logs.forEach(log => {
+        if (!log.polyline || log.polyline.length < 2) return;
+        const layer = L.polyline(log.polyline, {
+          color: '#94a3b8',
+          weight: 2,
+          opacity: 0.55,
+        }).addTo(ROUTE.map);
+        ROUTE.allLayers.set(log.id, layer);
+        log.polyline.forEach(p => allBounds.push(p));
+      });
+      if (allBounds.length >= 2 && !ROUTE.selectedId) {
+        ROUTE.map.fitBounds(allBounds, { padding: [24, 24] });
+      }
+    }
+
+    function selectRoute(logId) {
+      const log = STATE.logs.find(l => l.id === logId);
+      if (!log) return;
+      ROUTE.selectedId = logId;
+      ROUTE.allLayers.forEach((layer, id) => {
+        if (id === logId) {
+          layer.setStyle({ color: '#16a34a', weight: 5, opacity: 0.95 });
+        } else {
+          layer.setStyle({ color: '#cbd5e1', weight: 1, opacity: 0.4 });
+        }
+      });
+      if (ROUTE.startEndMarkers) {
+        ROUTE.startEndMarkers.forEach(m => ROUTE.map.removeLayer(m));
+        ROUTE.startEndMarkers = null;
+      }
+      if (log.polyline && log.polyline.length >= 2) {
+        const start = log.polyline[0];
+        const end = log.polyline[log.polyline.length - 1];
+        const startMarker = L.circleMarker(start, {
+          radius: 7, color: '#16a34a', fillColor: '#fff', fillOpacity: 1, weight: 3,
+        }).addTo(ROUTE.map);
+        startMarker.addTo = () => startMarker;
+        startMarker.bindTooltip = () => startMarker;
+        const endMarker = L.circleMarker(end, {
+          radius: 7, color: '#dc2626', fillColor: '#fff', fillOpacity: 1, weight: 3,
+        }).addTo(ROUTE.map);
+        endMarker.addTo = () => endMarker;
+        endMarker.bindTooltip = () => endMarker;
+        ROUTE.startEndMarkers = [startMarker, endMarker];
+        ROUTE.map.fitBounds(log.polyline, { padding: [40, 40] });
+      } else {
+        showToast('この記録にはGPSデータがありません');
+      }
+      document.querySelectorAll('.route-item').forEach(el => {
+        el.classList.toggle('selected', el.dataset.id === logId);
+      });
+      const target = document.querySelector('.route-item[data-id="' + cssEscRoute(logId) + '"]');
+      if (target && target.scrollIntoView) target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      updateRouteStats(log);
+      document.getElementById('routeResetBtn').disabled = false;
+    }
+
+    function cssEscRoute(s) {
+      if (window.CSS && CSS.escape) return CSS.escape(s);
+      return String(s).replace(/[^a-zA-Z0-9_-]/g, c => '\\' + c);
+    }
+
+    function resetRouteView() {
+      ROUTE.selectedId = null;
+      ROUTE.allLayers.forEach((layer) => {
+        layer.setStyle({ color: '#94a3b8', weight: 2, opacity: 0.55 });
+      });
+      if (ROUTE.startEndMarkers) {
+        ROUTE.startEndMarkers.forEach(m => ROUTE.map.removeLayer(m));
+        ROUTE.startEndMarkers = null;
+      }
+      document.querySelectorAll('.route-item.selected').forEach(el => el.classList.remove('selected'));
+      const allBounds = [];
+      ROUTE.allLayers.forEach(layer => {
+        if (layer.getLatLngs) {
+          layer.getLatLngs().forEach(p => allBounds.push(p));
+        }
+      });
+      if (allBounds.length >= 2) {
+        ROUTE.map.fitBounds(allBounds, { padding: [24, 24] });
+      }
+      updateRouteStats();
+      document.getElementById('routeResetBtn').disabled = true;
+    }
+
+    function renderRouteList() {
+      const wrap = document.getElementById('routeList');
+      if (!STATE.logs.length) {
+        wrap.innerHTML = '<div class="empty">まだ記録がありません。<br>「新規記録」タブから追加してください。</div>';
+        return;
+      }
+      const groups = new Map();
+      STATE.logs.forEach(l => {
+        const ym = (l.date || '').slice(0, 7);
+        if (!groups.has(ym)) groups.set(ym, []);
+        groups.get(ym).push(l);
+      });
+      const ymKeys = Array.from(groups.keys()).sort().reverse();
+      let html = '';
+      ymKeys.forEach(ym => {
+        const items = groups.get(ym).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        html += '<div class="month-label">' + escRoute(ym) + '</div>';
+        items.forEach(l => {
+          const hasGps = l.polyline && l.polyline.length >= 2;
+          html += '<div class="route-item" data-id="' + escRoute(l.id) + '">' +
+            '<div class="info">' +
+              '<div class="date">' + escRoute(l.date || '(日付なし)') + '</div>' +
+              '<div class="meta">' + formatDuration(l.duration_min || 0) +
+                (l.avg_speed_kmh ? ' / ' + l.avg_speed_kmh.toFixed(1) + ' km/h' : '') +
+              '</div>' +
+              (l.title ? '<div class="title">' + escRoute(l.title) + '</div>' : '') +
+              (hasGps ? '' : '<div class="no-gps">GPSデータなし</div>') +
+            '</div>' +
+            '<div class="km">' + (l.distance_km || 0).toFixed(1) + '<br><span style="font-size:10px;font-weight:400;">km</span></div>' +
+          '</div>';
+        });
+      });
+      wrap.innerHTML = html;
+      wrap.querySelectorAll('.route-item').forEach(el => {
+        el.addEventListener('click', () => selectRoute(el.dataset.id));
+      });
+    }
+
+    function escRoute(s) {
+      return String(s || '').replace(/[<>&"']/g, c => ({
+        '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'
+      })[c]);
+    }
+
+    function updateRouteStats(log) {
+      const stats = document.getElementById('routeStats');
+      if (log) {
+        const dur = formatDuration(log.duration_min || 0);
+        const km = (log.distance_km || 0).toFixed(1);
+        const spd = (log.avg_speed_kmh || 0).toFixed(1);
+        stats.innerHTML =
+          '<div class="stat"><div class="v">' + km + '</div><div class="u">km</div></div>' +
+          '<div class="stat"><div class="v">' + dur + '</div><div class="u">時間</div></div>' +
+          '<div class="stat"><div class="v">' + spd + '</div><div class="u">km/h</div></div>' +
+          '<div class="stat empty"><div class="v">1</div><div class="u">選択中</div></div>';
+      } else {
+        const totalKm = STATE.logs.reduce((s, l) => s + (l.distance_km || 0), 0);
+        const totalMin = STATE.logs.reduce((s, l) => s + (l.duration_min || 0), 0);
+        const withGps = STATE.logs.filter(l => l.polyline && l.polyline.length >= 2).length;
+        const avg = totalMin > 0 ? (totalKm / (totalMin / 60)) : 0;
+        stats.innerHTML =
+          '<div class="stat"><div class="v">' + totalKm.toFixed(1) + '</div><div class="u">合計km</div></div>' +
+          '<div class="stat"><div class="v">' + formatDuration(totalMin) + '</div><div class="u">合計時間</div></div>' +
+          '<div class="stat"><div class="v">' + avg.toFixed(1) + '</div><div class="u">平均km/h</div></div>' +
+          '<div class="stat"><div class="v">' + STATE.logs.length +
+            '<span style="font-size:10px;color:var(--muted);"> (GPS ' + withGps + ')</span></div>' +
+          '<div class="u">記録数</div></div>';
+      }
+    }
+
+    function renderRouteIfActive() {
+      // The map is hidden when the form view is shown — Leaflet needs an
+      // invalidateSize() after becoming visible, otherwise it draws blank
+      // tiles in a 0×0 container. Call this whenever the route view
+      // becomes visible.
+      if (document.getElementById('routeView').style.display === 'none') return;
+      renderRouteList();
+      ensureRouteMap();
+      drawAllRoutes();
+      updateRouteStats();
+      // Defer one frame so Leaflet sees the new container size.
+      requestAnimationFrame(() => {
+        if (ROUTE.map) ROUTE.map.invalidateSize();
+      });
+    }
+
+    // ---- Mode tab switching ----
+    document.querySelectorAll('.mode-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.mode;
+        document.querySelectorAll('.mode-tab').forEach(b => b.classList.toggle('active', b === btn));
+        if (mode === 'record') {
+          document.getElementById('formCard').style.display = '';
+          const formCard = document.getElementById('formCard');
+          // The formCard sits at the top; show it and hide the route view.
+          // (The "今月の記録" card stays visible in both modes.)
+          document.getElementById('routeView').style.display = 'none';
+          // Show the GPS section (id="map") only if it was already open.
+          if (STATE.gps && STATE.gps.active) {
+            document.getElementById('map').style.display = 'block';
+            document.getElementById('gpsStats').style.display = 'grid';
+          }
+        } else if (mode === 'routes') {
+          document.getElementById('routeView').style.display = '';
+          // Hide the formCard + map + GPS stats so the route view owns the
+          // vertical space. The "今月の記録" card is still visible.
+          document.getElementById('formCard').style.display = 'none';
+          if (STATE.gps) {
+            // Pause GPS sampling while the form is hidden? No — GPS is the
+            // user's explicit action. We just hide the live map view; the
+            // route view shows saved routes, not the current one.
+          }
+          renderRouteIfActive();
+        }
+      });
+    });
+
+    document.getElementById('routeResetBtn').addEventListener('click', resetRouteView);
 
     // ---- Boot ----
     start();
