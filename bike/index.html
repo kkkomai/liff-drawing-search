@@ -835,19 +835,60 @@
       if (!ROUTE.map) return;
       ROUTE.allLayers.forEach(layer => ROUTE.map.removeLayer(layer));
       ROUTE.allLayers.clear();
+      // Remove any lingering start/end markers from a previous selection —
+      // they will be re-added by selectRoute() once we know whether a
+      // selection survived the re-render.
+      if (ROUTE.startEndMarkers) {
+        ROUTE.startEndMarkers.forEach(m => ROUTE.map.removeLayer(m));
+        ROUTE.startEndMarkers = null;
+      }
       const allBounds = [];
       STATE.logs.forEach(log => {
         if (!log.polyline || log.polyline.length < 2) return;
+        // Preserve the selection across re-renders. loadLogs() may
+        // trigger another drawAllRoutes() (for example when the auth
+        // round-trip finally returns a token), and without this the
+        // selected route would silently fall back to the gray default
+        // style and the user would see the highlight "fade" without
+        // any obvious reason.
+        var isSelected = (ROUTE.selectedId === log.id);
         const layer = L.polyline(log.polyline, {
-          color: '#94a3b8',
-          weight: 3,
-          opacity: 0.55,
+          color: isSelected ? '#16a34a' : '#94a3b8',
+          weight: isSelected ? 8 : 3,
+          opacity: isSelected ? 0.95 : (ROUTE.selectedId ? 0.4 : 0.55),
         }).addTo(ROUTE.map);
         ROUTE.allLayers.set(log.id, layer);
         log.polyline.forEach(p => allBounds.push(p));
       });
+      // Re-attach start/end markers for the still-selected route, since
+      // we just removed them above.
+      if (ROUTE.selectedId) {
+        const sel = STATE.logs.find(l => l.id === ROUTE.selectedId);
+        if (sel && sel.polyline && sel.polyline.length >= 2) {
+          const start = sel.polyline[0];
+          const end = sel.polyline[sel.polyline.length - 1];
+          const startMarker = L.circleMarker(start, {
+            radius: 9, color: '#16a34a', fillColor: '#fff', fillOpacity: 1, weight: 4,
+          }).addTo(ROUTE.map);
+          startMarker.addTo = () => startMarker;
+          startMarker.bindTooltip = () => startMarker;
+          const endMarker = L.circleMarker(end, {
+            radius: 9, color: '#dc2626', fillColor: '#fff', fillOpacity: 1, weight: 4,
+          }).addTo(ROUTE.map);
+          endMarker.addTo = () => endMarker;
+          endMarker.bindTooltip = () => endMarker;
+          ROUTE.startEndMarkers = [startMarker, endMarker];
+        }
+      }
       if (allBounds.length >= 2 && !ROUTE.selectedId) {
         ROUTE.map.fitBounds(allBounds, { padding: [24, 24] });
+      } else if (ROUTE.selectedId) {
+        // Keep the selected route centred; the user just interacted
+        // with it and the camera should not jump away on a re-render.
+        const sel = STATE.logs.find(l => l.id === ROUTE.selectedId);
+        if (sel && sel.polyline && sel.polyline.length >= 2) {
+          ROUTE.map.fitBounds(sel.polyline, { padding: [40, 40] });
+        }
       }
     }
 
