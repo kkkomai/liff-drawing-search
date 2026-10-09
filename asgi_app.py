@@ -902,7 +902,7 @@ app.add_middleware(
 _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
-    "Permissions-Policy": "geolocation=(self), camera=(), microphone=(), payment=()",
+    "Permissions-Policy": "geolocation=(*), camera=(), microphone=(), payment=()",
     # No X-Frame-Options here. The modern equivalent below
     # (``frame-ancestors 'self' https://liff.line.me`` in CSP) covers the
     # same threat. Setting X-Frame-Options: ALLOW-FROM without 'self'
