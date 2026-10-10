@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261009weather</title>
-  <script>window.__v="20261009weather";</script>
+  <title>申請フォーム - v20261009guarded</title>
+  <script>window.__v="20261009guarded";</script>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/manifest-icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -169,7 +169,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009weather)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009guarded)</span></h1>
 
   <!-- LIFF guard: when this page is opened outside the LINE LIFF WebView
        (e.g. by typing the URL into a normal browser), the application is
@@ -2572,6 +2572,16 @@ liff.init({
         if (body) body.textContent = message;
         panel.style.display = 'flex';
       }
+      // Make sure the LIFF-not-loaded guard is hidden, otherwise the
+      // user sees both panels stacked. The initLiff flow only shows
+      // the LIFF guard when it is genuinely outside LINE, but if the
+      // auth round-trip fails for any reason (5xx retry, network
+      // problem, etc.) the guard may still be up from an earlier
+      // judgement and the user is left wondering which message to
+      // read. Hide it here so the auth-failure panel is the single
+      // source of truth.
+      var liffGuard = document.getElementById('liff-guard');
+      if (liffGuard) liffGuard.style.display = 'none';
     }
 
     function getAuthToken() {
