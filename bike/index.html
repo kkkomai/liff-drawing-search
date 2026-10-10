@@ -339,6 +339,16 @@
 
   <div class="toast" id="toast"></div>
 
+  <!-- Capacitor GPS bridge. When the page runs inside the native
+       iOS WKWebView (see mobile/), window.Capacitor.Plugins.BikeLogGPS
+       is defined and the helpers below route geolocation through the
+       native CLLocationManager so the OS keeps firing updates while
+       the screen is locked. In a regular browser, the same module
+       is loaded but every helper short-circuits to the web Geolocation
+       API, so development on this file alone (without building the
+       iOS app) is still possible. -->
+  <script src="capacitor-gps.js"></script>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
           crossorigin=""></script>
@@ -731,7 +741,7 @@
     let GPS_SAMPLE_INTERVAL_MS = 3 * 60 * 1000;
 
     function startGps() {
-      if (!navigator.geolocation) {
+      if (!navigator.geolocation && !(window.BikeLogGPS && window.BikeLogGPS.isNative())) {
         showToast('このブラウザはGPSに対応していません', true);
         return;
       }
@@ -740,35 +750,85 @@
       STATE.gps.totalDistanceM = 0;
       STATE.gps.lastPoint = null;
       STATE.gps.startTs = Date.now();
-      // Take the first sample immediately so the polyline is not empty until
-      // the first 3-minute tick fires, then keep sampling on a fixed interval.
-      // watchPosition would give us continuous updates but at the cost of
-      // battery and a polyline dense enough to dwarf the route-detail map.
-      sampleGps();
-      STATE.gps.timer = setInterval(sampleGps, GPS_SAMPLE_INTERVAL_MS);
-      // iOS pauses every JS timer (including setInterval) while the
-      // screen is off, so the periodic sampler will stop firing the
-      // moment the user locks their phone. When they come back, the
-      // first tick may be many minutes late, leaving a long gap in
-      // the polyline. The visibilitychange event fires the moment the
-      // page becomes visible again, so we can take an immediate
-      // sample and reset the cadence without waiting for the next
-      // scheduled tick.
-      if (!STATE.gps.visibilityHandler) {
-        STATE.gps.visibilityHandler = function () {
-          if (document.visibilityState === 'visible' && STATE.gps.active) {
-            // Immediate sample, then re-arm the interval so future
-            // ticks stay on the same 3-minute cadence rather than
-            // drifting by however long the screen was off.
-            if (STATE.gps.timer) clearInterval(STATE.gps.timer);
-            sampleGps();
-            STATE.gps.timer = setInterval(sampleGps, GPS_SAMPLE_INTERVAL_MS);
+      // When the page runs inside the native iOS WKWebView, prefer
+      // the native CLLocationManager so background updates keep
+      // flowing when the screen is locked. The plugin keeps the
+      // location stream alive across backgrounding; web Geolocation
+      // would pause at the first lock.
+      var useNative = window.BikeLogGPS && window.BikeLogGPS.isNative();
+      if (useNative) {
+        gpsStateEl.textContent = '計測中...（ネイティブGPS、3分ごとに記録）';
+        // Request "always" first, then start streaming. The
+        // requestPermission call surfaces the iOS system prompt
+        // for the user to upgrade from "when in use" to "always".
+        window.BikeLogGPS.requestPermission().then(function () {
+          return window.BikeLogGPS.start();
+        }).then(function () {
+          // First seed point: get one fix immediately so the polyline
+          // is not empty until the OS first pushes an update.
+          window.BikeLogGPS.getCurrentPosition().then(function (pos) {
+            if (pos && STATE.gps.active) {
+              onGpsPos({
+                coords: {
+                  latitude: pos.latitude,
+                  longitude: pos.longitude,
+                  accuracy: pos.accuracy,
+                },
+                timestamp: pos.timestamp,
+              });
+            }
+          });
+          // Subscribe to subsequent position events.
+          if (STATE.gps.nativePosListener) {
+            try { STATE.gps.nativePosListener(); } catch (e) { /* ignore */ }
           }
-        };
-        document.addEventListener('visibilitychange', STATE.gps.visibilityHandler);
+          STATE.gps.nativePosListener = window.BikeLogGPS.onPosition(function (pos) {
+            if (!STATE.gps.active) return;
+            onGpsPos({
+              coords: {
+                latitude: pos.latitude,
+                longitude: pos.longitude,
+                accuracy: pos.accuracy,
+              },
+              timestamp: pos.timestamp,
+            });
+          });
+          if (STATE.gps.nativeErrListener) {
+            try { STATE.gps.nativeErrListener(); } catch (e) { /* ignore */ }
+          }
+          STATE.gps.nativeErrListener = window.BikeLogGPS.onError(function (err) {
+            showToast('ネイティブGPS エラー: ' + (err.message || err.code || 'unknown'), true);
+          });
+        }).catch(function (e) {
+          showToast('ネイティブGPS開始失敗: ' + (e && e.message || e), true);
+        });
+      } else {
+        // Web-only path (browser / LIFF without Capacitor).
+        sampleGps();
+        STATE.gps.timer = setInterval(sampleGps, GPS_SAMPLE_INTERVAL_MS);
+        // iOS pauses every JS timer (including setInterval) while the
+        // screen is off, so the periodic sampler will stop firing the
+        // moment the user locks their phone. When they come back, the
+        // first tick may be many minutes late, leaving a long gap in
+        // the polyline. The visibilitychange event fires the moment
+        // the page becomes visible again, so we can take an immediate
+        // sample and reset the cadence without waiting for the next
+        // scheduled tick.
+        if (!STATE.gps.visibilityHandler) {
+          STATE.gps.visibilityHandler = function () {
+            if (document.visibilityState === 'visible' && STATE.gps.active) {
+              // Immediate sample, then re-arm the interval so future
+              // ticks stay on the same 3-minute cadence rather than
+              // drifting by however long the screen was off.
+              if (STATE.gps.timer) clearInterval(STATE.gps.timer);
+              sampleGps();
+              STATE.gps.timer = setInterval(sampleGps, GPS_SAMPLE_INTERVAL_MS);
+            }
+          };
+          document.addEventListener('visibilitychange', STATE.gps.visibilityHandler);
+        }
       }
       gpsBtn.textContent = '⏹ GPS記録 停止';
-      gpsStateEl.textContent = '計測中...（3分ごとに記録）';
       document.getElementById('map').style.display = 'block';
       document.getElementById('gpsStats').style.display = 'grid';
       ensureMap();
@@ -779,8 +839,21 @@
 
     function stopGps() {
       STATE.gps.active = false;
-      if (STATE.gps.timer) { clearInterval(STATE.gps.timer); STATE.gps.timer = null; }
-      if (STATE.gps.displayTimer) { clearInterval(STATE.gps.displayTimer); STATE.gps.displayTimer = null; }
+      var useNative = window.BikeLogGPS && window.BikeLogGPS.isNative();
+      if (useNative) {
+        if (STATE.gps.nativePosListener) {
+          try { STATE.gps.nativePosListener(); } catch (e) { /* ignore */ }
+          STATE.gps.nativePosListener = null;
+        }
+        if (STATE.gps.nativeErrListener) {
+          try { STATE.gps.nativeErrListener(); } catch (e) { /* ignore */ }
+          STATE.gps.nativeErrListener = null;
+        }
+        window.BikeLogGPS.stop();
+      } else {
+        if (STATE.gps.timer) { clearInterval(STATE.gps.timer); STATE.gps.timer = null; }
+        if (STATE.gps.displayTimer) { clearInterval(STATE.gps.displayTimer); STATE.gps.displayTimer = null; }
+      }
       // Detach the visibility-change handler so a stray "visible"
       // event from another tab interaction does not re-arm the
       // sampler. The handler reference is left in STATE so a later

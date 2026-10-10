@@ -1,0 +1,17 @@
+{
+  "appId": "jp.kkomai.bikelog",
+  "appName": "BikeLog",
+  "webDir": "www",
+  "server": {
+    "url": "https://liff-drawing-search.onrender.com",
+    "iosScheme": "bikelog",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#f8fafc",
+    "webContentsDebuggingEnabled": true,
+    "allowsLinkPreview": false
+  }
+}
