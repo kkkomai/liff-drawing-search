@@ -8,6 +8,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>申請フォーム - v20261009weather</title>
   <script>window.__v="20261009weather";</script>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/manifest-icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="申請フォーム">
+  <meta name="theme-color" content="#16a34a">
   <script charset="utf-8" src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2584,6 +2590,20 @@ liff.init({
       log('initLiff promise rejected: ' + e.message, true);
     });
     log('All initialization complete');
+
+    // PWA service worker registration. iOS Safari only registers
+    // a service worker for the home-screen app shell (not for the
+    // in-LINE LIFF context), so the SW has no effect on the regular
+    // LIFF use case. It exists so a user who installs the home-screen
+    // shortcut gets a faster cold start and a tiny offline cache for
+    // the static assets.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js').catch(function (err) {
+          log('service worker registration failed: ' + err.message, true);
+        });
+      });
+    }
 
     // === DRAG & DROP + PASTE SUPPORT ===
     function handleDroppedOrPastedFile(file, targetInputId) {

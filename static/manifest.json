@@ -1,0 +1,55 @@
+{
+  "name": "申請フォーム",
+  "short_name": "申請フォーム",
+  "description": "残業申請・有給申請・お弁当注文・自転車ログ・天気予報を一つのLIFFアプリで",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#16a34a",
+  "lang": "ja",
+  "dir": "ltr",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/manifest-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/manifest-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "残業申請",
+      "short_name": "残業",
+      "url": "/?tab=overtime&source=pwa"
+    },
+    {
+      "name": "有給申請",
+      "short_name": "有給",
+      "url": "/?tab=paid&source=pwa"
+    },
+    {
+      "name": "お弁当注文",
+      "short_name": "弁当",
+      "url": "/?tab=bento&source=pwa"
+    },
+    {
+      "name": "自転車ログ",
+      "short_name": "自転車",
+      "url": "/?tab=bike&source=pwa"
+    },
+    {
+      "name": "天気予報",
+      "short_name": "天気",
+      "url": "/?tab=weather&source=pwa"
+    }
+  ]
+}

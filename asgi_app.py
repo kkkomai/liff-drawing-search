@@ -1120,6 +1120,68 @@ async def form() -> FileResponse:
     return FileResponse(BASE_DIR / "form.html", headers=_NO_CACHE)
 
 
+# --------------------------------------------------------------------------- #
+# PWA (Progressive Web App) support.
+#
+# The manifest and service worker let iOS Safari (and Android Chrome)
+# install the LIFF form app to the home screen as a "standalone" app,
+# so a user can launch it with one tap instead of going through LINE
+# every time. Background location is still not possible from a PWA on
+# iOS — that requires a native shell (see mobile/) — but the home-
+# screen icon makes daily use much smoother.
+# --------------------------------------------------------------------------- #
+_STATIC_DIR = BASE_DIR / "static"
+
+
+@app.get("/manifest.json")
+def pwa_manifest() -> FileResponse:
+    # iOS only reads the manifest at install time, so cache it
+    # aggressively. The host page's no-cache header would be wrong
+    # here — it would force iOS to re-download every install
+    # attempt and occasionally invalidate the manifest mid-update.
+    return FileResponse(
+        _STATIC_DIR / "manifest.json",
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@app.get("/sw.js")
+def pwa_service_worker() -> FileResponse:
+    return FileResponse(
+        _STATIC_DIR / "sw.js",
+        media_type="application/javascript",
+        # The browser must re-validate the service worker file on
+        # each load so a deploy can take effect without forcing the
+        # user to clear the site data. iOS Safari honours this
+        # header, Android Chrome does as well.
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+
+
+# iOS Safari calls one of these depending on the device pixel ratio
+# at install time. The 192px icon is the only one iOS Safari 16+
+# actually reads (Apple's PWA install sheet ignores 512), so we
+# serve that one for both URLs. Android Chrome will downscale the
+# 512 variant correctly if it is ever installed there.
+@app.get("/manifest-icon-192.png")
+def pwa_icon_192() -> FileResponse:
+    return FileResponse(
+        _STATIC_DIR / "manifest-icon-192.png",
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@app.get("/manifest-icon-512.png")
+def pwa_icon_512() -> FileResponse:
+    return FileResponse(
+        _STATIC_DIR / "manifest-icon-512.png",
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 # Catch-all. Registered last, after every explicit route and the /bento mount.
 app.mount("/", StaticFiles(directory=str(BASE_DIR), html=True), name="static")
 
