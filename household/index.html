@@ -317,6 +317,22 @@
     }
     .prev-month .diff-up { color: var(--danger); font-weight: 700; }
     .prev-month .diff-down { color: var(--accent); font-weight: 700; }
+
+    /* ---- 月別合計 (全期間) ---- */
+    .month-total-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 9px 6px;
+      border-top: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .month-total-row:first-child { border-top: none; }
+    .month-total-row .m { flex: 1; }
+    .month-total-row .t { font-weight: 700; }
+    .month-total-row .c { font-size: 11px; color: var(--muted); width: 48px; text-align: right; }
+    .month-total-row.current { background: #f0fdf4; border-radius: 6px; }
   </style>
 </head>
 <body>
@@ -399,6 +415,12 @@
         <div id="catSummary"><div class="empty">読み込み中...</div></div>
         <div class="prev-month" id="prevMonthLine"></div>
       </div>
+
+      <!-- 月別の合計 (全期間。タップでその月に移動) -->
+      <div class="card">
+        <h2>月別の合計</h2>
+        <div id="monthlyTotals"><div class="empty">読み込み中...</div></div>
+      </div>
     </div>
   </main>
 
@@ -420,6 +442,7 @@
       month: '',
       selectedDate: '',
       expenses: [],      // 当月の支出一覧 (サーバー or フィクスチャ)
+      allExpenses: [],   // 全期間の支出一覧 (月別合計カード用)
       summary: null,     // 当月サマリー
       editingId: null,   // 編集中の支出ID (null=新規)
     };
@@ -612,6 +635,13 @@
         const mock = buildMockData(STATE.month);
         STATE.expenses = mock.expenses;
         STATE.summary = mock.summary;
+        // 月別合計カードのプレビュー用に先月分の行も用意する
+        // (カレンダーには影響しないよう STATE.expenses とは別配列)
+        const prevYm = prevMonthOf(STATE.month);
+        STATE.allExpenses = mock.expenses.concat([
+          { id: 'mock-prev-1', spent_on: prevYm + '-05', item: '先月の光熱費', category: '光熱費', amount: 9800, note: '', created: prevYm + '-05T09:00:00+0900' },
+          { id: 'mock-prev-2', spent_on: prevYm + '-18', item: '先月の外食', category: '食費', amount: 3200, note: '', created: prevYm + '-18T09:00:00+0900' },
+        ]);
         renderAll();
         return;
       }
@@ -621,6 +651,11 @@
             headers: authHeaders(), cache: 'no-store',
           }),
           fetch(STATE.apiBase + '/household/expenses?month=' + encodeURIComponent(STATE.month), {
+            headers: authHeaders(), cache: 'no-store',
+          }),
+          // 月別合計カード用に全期間の明細を取得 (month/date 指定なし = 全行)。
+          // サーバーは行を line_user_id でスコープするので他人のデータは混ざらない。
+          fetch(STATE.apiBase + '/household/expenses', {
             headers: authHeaders(), cache: 'no-store',
           }),
         ]);
@@ -633,8 +668,10 @@
         }
         const sumJ = await results[0].json();
         const expJ = await results[1].json();
+        const allJ = await results[2].json();
         STATE.summary = sumJ || null;
         STATE.expenses = Array.isArray(expJ.expenses) ? expJ.expenses : [];
+        STATE.allExpenses = Array.isArray(allJ.expenses) ? allJ.expenses : [];
         renderAll();
       } catch (e) {
         const msg = e.message || String(e);
@@ -659,6 +696,7 @@
       renderCalendar();
       renderDayDetail();
       renderSummary();
+      renderMonthlyTotals();
     }
 
     function renderMonthNav() {
@@ -827,6 +865,52 @@
       document.getElementById('prevMonthLine').innerHTML =
         '<span>前月 (' + esc(prevMonth) + ') 合計 ' + fmtYen(prevTotal) + '</span>' +
         '<span>差額 ' + diffHtml + '</span>';
+    }
+
+    // ---- 月別の合計 (全期間) ----
+    // 全期間の明細 (STATE.allExpenses) を月ごとに集計して一覧にする。
+    // 行をタップするとその月に移動する。当月の行はハイライト。
+    function prevMonthOf(ym) {
+      const y = Number(ym.slice(0, 4));
+      const m = Number(ym.slice(5, 7));
+      const d = new Date(y, m - 2, 1);
+      const pad = n => (n < 10 ? '0' : '') + n;
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1);
+    }
+
+    function renderMonthlyTotals() {
+      const wrap = document.getElementById('monthlyTotals');
+      const byMonth = {};
+      STATE.allExpenses.forEach(e => {
+        const ym = String(e.spent_on || '').slice(0, 7);
+        if (!ym || ym.length !== 7) return;
+        byMonth[ym] = byMonth[ym] || { total: 0, count: 0 };
+        byMonth[ym].total += Number(e.amount) || 0;
+        byMonth[ym].count += 1;
+      });
+      const months = Object.keys(byMonth).sort().reverse();
+      if (!months.length) {
+        wrap.innerHTML = '<div class="empty">まだ支出の記録がありません</div>';
+        return;
+      }
+      wrap.innerHTML = months.map(ym => {
+        const y = Number(ym.slice(0, 4));
+        const m = Number(ym.slice(5, 7));
+        const cur = ym === STATE.month ? ' current' : '';
+        return '<div class="month-total-row' + cur + '" data-month="' + ym + '">' +
+          '<span class="m">' + y + '年' + m + '月</span>' +
+          '<span class="t">' + fmtYen(byMonth[ym].total) + '</span>' +
+          '<span class="c">' + byMonth[ym].count + '件</span>' +
+          '</div>';
+      }).join('');
+      wrap.querySelectorAll('.month-total-row').forEach(el => {
+        el.addEventListener('click', () => {
+          const ym = el.getAttribute('data-month');
+          if (!ym || ym === STATE.month) return;
+          STATE.month = ym;
+          loadMonth();
+        });
+      });
     }
 
     // ---- フォーム (追加/編集) ----
