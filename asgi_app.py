@@ -1273,7 +1273,13 @@ _PROTECTED_PREFIXES = (
     "/schedules",
     "/bike-logs",
     "/paid-leave",
-    "/household",
+    # household は API サブパスのみゲートする。"/household" 全体を
+    # ゲートしてしまうと iframe が読み込む /household/index.html 自体が
+    # 401 になり、タブが真っ白になる (bike は mount /bike と保護 prefix
+    # /bike-logs が偶然分離していたためこの問題がなかった)。
+    # startswith(p + "/") で /household/expenses/{id} も覆う。
+    "/household/expenses",
+    "/household/summary",
     # /api/orders and /api/admin are already protected by their own deps.
 )
 
