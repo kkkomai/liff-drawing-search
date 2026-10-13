@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -43,7 +44,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import Body, Depends, FastAPI, HTTPException
+from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -58,11 +59,18 @@ logger = logging.getLogger("uvicorn.error")
 # The bento backend is committed alongside this app at ./bento_backend (mirror
 # it with sync_bento_backend.py after editing projects/bento-liff/backend). The
 # development-tree path stays as a fallback so local runs work either way.
+#
+# 逆順で insert する: sys.path.insert(0, ...) は後から入れたものを先頭に
+# 置くため、正順で回すと fallback の projects ツリーがコミット済みの
+# bento_backend をシャドウしてしまう。このマシンには両方存在し、
+# projects 側の db.py は bind() を持たない旧版(SQLite専用)なので、認証が
+# 誤ったモジュールを引き「cannot import name 'bind'」で全リクエストが
+# 401 になる。コミット済みの bento_backend を最優先にする。
 _BENTO_CANDIDATES = [
     BASE_DIR / "bento_backend",
     BASE_DIR.parent / "projects" / "bento-liff" / "backend",
 ]
-for _cand in _BENTO_CANDIDATES:
+for _cand in reversed(_BENTO_CANDIDATES):
     if _cand.is_dir() and str(_cand) not in sys.path:
         sys.path.insert(0, str(_cand))
 
@@ -273,6 +281,14 @@ def health() -> dict:
     payload["bike_dir_listing"] = sorted(
         p.name for p in (BASE_DIR / "bike").iterdir()
     ) if (BASE_DIR / "bike").is_dir() else None
+    # Same probe for the household tab: a 404 on /household/index.html after
+    # a deploy is otherwise indistinguishable from "the directory never made
+    # it into the build". New static mounts can also 404 for ~30s while the
+    # process is mid-restart, so this boolean is what tells the two apart.
+    payload["household_dir_exists"] = (BASE_DIR / "household").is_dir()
+    payload["household_dir_listing"] = sorted(
+        p.name for p in (BASE_DIR / "household").iterdir()
+    ) if (BASE_DIR / "household").is_dir() else None
     # Report whether the ordering DB is actually reachable. /api/auth/login
     # returned a bare 500 with no body on Render while /health stayed green, so
     # "the app is mounted" was indistinguishable from "the database works".
@@ -851,6 +867,203 @@ async def delete_paid_leave_route(leave_id: str) -> JSONResponse:
 
 
 # --------------------------------------------------------------------------- #
+# Household bookkeeping API (mirrors /schedules, /bike-logs and /paid-leave).
+#
+# Same Postgres pattern as the other employee-facing tables. Unlike
+# bike/paid-leave, every row is scoped to a LINE user id taken from the
+# session (see below) — the client never gets to choose whose expenses it
+# sees, which is why there is no JSON-file fallback branch: without a
+# resolved employee there is nothing to scope the rows to.
+#
+# The /household prefix is listed in _PROTECTED_PREFIXES so the
+# employees-table auth gate rejects unauthenticated requests with 401.
+# --------------------------------------------------------------------------- #
+
+# Fixed category whitelist. The client's value is validated against this
+# list server-side (unknown value -> 400) because the summary groups by
+# category text: an arbitrary string from the client would fragment the
+# per-category aggregation instead of being rejected.
+HOUSEHOLD_CATEGORIES = (
+    "食費",
+    "日用品",
+    "交通費",
+    "趣味・娯楽",
+    "衣服",
+    "医療・健康",
+    "交際費",
+    "光熱費",
+    "住居",
+    "その他",
+)
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _valid_date_str(value: str) -> bool:
+    """YYYY-MM-DD かつ実在する日付かの検証。
+
+    正規表現だけでなく datetime.strptime で実在日付まで確認する。
+    2026-02-31 のような存在しない日付を弾かないと TEXT 列に
+    入った後に月フィルタ(LIKE 'YYYY-MM%')で集計が狂う。
+    """
+    if not _DATE_RE.match(value):
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
+
+
+def _valid_month_str(value: str) -> bool:
+    """YYYY-MM 形式かの検証(bike-logs summary と同じルール)。"""
+    return bool(value) and len(value) == 7 and value[4] == "-" and value[:4].isdigit() and value[5:].isdigit()
+
+
+def _household_line_user_id(request) -> str:
+    """セッションから line_user_id を解決する。
+
+    クライアントが送る line_user_id は一切信用しない(他人の家計簿を
+    読み書きできてしまうため)。セッションで解決した社員の LINE ユーザー
+    ID が未登録なら 400。
+    """
+    emp = _resolve_employee_or_401(request)
+    line_user_id = emp.get("line_user_id")
+    if not line_user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="社員情報にLINEユーザーIDが登録されていません。",
+        )
+    return str(line_user_id)
+
+
+def _household_expense_from_payload(data: dict) -> dict:
+    spent_on = str(data.get("spent_on", "")).strip()
+    if not _valid_date_str(spent_on):
+        raise HTTPException(status_code=400, detail="spent_on は YYYY-MM-DD 形式の実在する日付で入力してください")
+    category = str(data.get("category", "") or "").strip() or "その他"
+    if category not in HOUSEHOLD_CATEGORIES:
+        raise HTTPException(status_code=400, detail="不正なカテゴリです: " + category)
+    amount_raw = data.get("amount", 0)
+    # amount は整数・0以上のみ。小数や数値でない文字列は弾く(自転車の
+    # distance は float で黙って丸めていたが、金額の丸めはズレが直接
+    # 見えるので厳格にする)。
+    if isinstance(amount_raw, bool):
+        raise HTTPException(status_code=400, detail="amount は0以上の整数で入力してください")
+    try:
+        if isinstance(amount_raw, str):
+            amount = int(amount_raw.strip())
+        elif isinstance(amount_raw, float):
+            if not amount_raw.is_integer():
+                raise HTTPException(status_code=400, detail="amount は0以上の整数で入力してください")
+            amount = int(amount_raw)
+        else:
+            amount = int(amount_raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="amount は0以上の整数で入力してください")
+    if amount < 0:
+        raise HTTPException(status_code=400, detail="amount は0以上の整数で入力してください")
+    item = str(data.get("item", "") or "").strip()[:200]
+    note = str(data.get("note", "") or "").strip()[:500]
+    return {
+        "id": str(uuid.uuid4()),
+        "spent_on": spent_on,
+        "item": item,
+        "category": category,
+        "amount": amount,
+        "note": note,
+        "created": datetime.now(JST).strftime("%Y-%m-%dT%H:%M:%S+0900"),
+    }
+
+
+@app.get("/household/expenses")
+def get_household_expenses(request: Request, month: str | None = None, date: str | None = None) -> dict:
+    line_user_id = _household_line_user_id(request)
+    if month and date:
+        raise HTTPException(status_code=400, detail="month と date は同時に指定できません")
+    if month:
+        if not _valid_month_str(month):
+            raise HTTPException(status_code=400, detail="expected YYYY-MM")
+    if date:
+        if not _valid_date_str(date):
+            raise HTTPException(status_code=400, detail="expected YYYY-MM-DD")
+    from household_db import list_expenses  # type: ignore
+    return {"expenses": list_expenses(line_user_id, month=month, date=date)}
+
+
+@app.get("/household/summary")
+def get_household_summary(request: Request, month: str) -> dict:
+    line_user_id = _household_line_user_id(request)
+    if not _valid_month_str(month):
+        raise HTTPException(status_code=400, detail="expected YYYY-MM")
+    from household_db import monthly_summary  # type: ignore
+    return monthly_summary(line_user_id, month)
+
+
+@app.post("/household/expenses")
+async def create_household_expense(request: Request, payload: dict = Body(...)) -> JSONResponse:
+    line_user_id = _household_line_user_id(request)
+    entry = _household_expense_from_payload(payload)
+    entry["line_user_id"] = line_user_id
+    from household_db import insert_expense  # type: ignore
+    insert_expense(entry)
+    return JSONResponse(status_code=201, content={"success": True, "expense": entry})
+
+
+@app.put("/household/expenses/{expense_id}")
+async def update_household_expense(
+    expense_id: str, request: Request, payload: dict = Body(...)
+) -> JSONResponse:
+    line_user_id = _household_line_user_id(request)
+    # 部分更新なので item 以外の既定項目もここで検証する。spent_on は
+    # 省略可(存在すれば日付検証)、category は省略時は現状値を維持
+    # (household_db 側で未指定キーは書き換えない)。
+    if "spent_on" in payload and payload["spent_on"] is not None:
+        if not _valid_date_str(str(payload["spent_on"]).strip()):
+            raise HTTPException(status_code=400, detail="spent_on は YYYY-MM-DD 形式の実在する日付で入力してください")
+    if "category" in payload and payload["category"] is not None:
+        category = str(payload["category"]).strip()
+        if category not in HOUSEHOLD_CATEGORIES:
+            raise HTTPException(status_code=400, detail="不正なカテゴリです: " + category)
+    if "amount" in payload and payload["amount"] is not None:
+        amount_raw = payload["amount"]
+        if isinstance(amount_raw, bool):
+            raise HTTPException(status_code=400, detail="amount は0以上の整数で入力してください")
+        try:
+            if isinstance(amount_raw, str):
+                amount = int(amount_raw.strip())
+            elif isinstance(amount_raw, float):
+                if not amount_raw.is_integer():
+                    raise HTTPException(status_code=400, detail="amount は0以上の整数で入力してください")
+                amount = int(amount_raw)
+            else:
+                amount = int(amount_raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="amount は0以上の整数で入力してください")
+        if amount < 0:
+            raise HTTPException(status_code=400, detail="amount は0以上の整数で入力してください")
+        payload["amount"] = amount
+    if "item" in payload and payload["item"] is not None:
+        payload["item"] = str(payload["item"]).strip()[:200]
+    if "note" in payload and payload["note"] is not None:
+        payload["note"] = str(payload["note"]).strip()[:500]
+    from household_db import update_expense  # type: ignore
+    updated = update_expense(expense_id, line_user_id, payload)
+    if not updated:
+        return JSONResponse(status_code=404, content={"success": False, "error": "not found"})
+    return JSONResponse(content={"success": True, "expense": updated})
+
+
+@app.delete("/household/expenses/{expense_id}")
+async def delete_household_expense(expense_id: str, request: Request) -> JSONResponse:
+    line_user_id = _household_line_user_id(request)
+    from household_db import delete_expense  # type: ignore
+    if delete_expense(expense_id, line_user_id):
+        return JSONResponse(content={"success": True, "message": "Household expense deleted"})
+    return JSONResponse(status_code=404, content={"success": False, "error": "not found"})
+
+
+# --------------------------------------------------------------------------- #
 # bento ordering API (mounted last so it never shadows the routes above)
 # --------------------------------------------------------------------------- #
 
@@ -1060,6 +1273,7 @@ _PROTECTED_PREFIXES = (
     "/schedules",
     "/bike-logs",
     "/paid-leave",
+    "/household",
     # /api/orders and /api/admin are already protected by their own deps.
 )
 
@@ -1106,6 +1320,12 @@ if (BASE_DIR / "bike").is_dir():
 
 if (BASE_DIR / "weather").is_dir():
     app.mount("/weather", StaticFiles(directory=str(BASE_DIR / "weather"), html=True), name="weather")
+
+# 家計簿フロントエンド用。フロントエンド担当が household/ を作成するまで
+# 存在しない可能性があるため、bento/bike/weather と同じ条件付きマウントに
+# する(ディレクトリが無くてもアプリは起動する)。
+if (BASE_DIR / "household").is_dir():
+    app.mount("/household", StaticFiles(directory=str(BASE_DIR / "household"), html=True), name="household")
 
 _NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate"}
 

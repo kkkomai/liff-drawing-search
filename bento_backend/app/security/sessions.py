@@ -40,7 +40,7 @@ def resolve_session(conn, token: str) -> dict | None:
     row = conn.execute(
         bind(
             "SELECT s.expires_at, s.revoked_at, e.id AS employee_id, e.employee_code, e.name,"
-            "       e.role, e.is_active"
+            "       e.role, e.is_active, e.line_user_id"
             "  FROM sessions s"
             "  JOIN employees e ON e.id = s.employee_id"
             " WHERE s.token_hash = ?"

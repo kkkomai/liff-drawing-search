@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261009guarded</title>
-  <script>window.__v="20261009guarded";</script>
+  <title>申請フォーム - v20261013household</title>
+  <script>window.__v="20261013household";</script>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/manifest-icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -274,6 +274,7 @@
       <button id="tab-paid-btn" class="tab" data-tab="paid" ontouchstart="switchTab('paid')" onclick="switchTab('paid')">有給申請</button>
       <button id="tab-bento-btn" class="tab" data-tab="bento" ontouchstart="switchTab('bento')" onclick="switchTab('bento')">お弁当注文</button>
       <button id="tab-bike-btn" class="tab" data-tab="bike" ontouchstart="switchTab('bike')" onclick="switchTab('bike')">自転車ログ</button>
+      <button id="tab-household-btn" class="tab" data-tab="household" ontouchstart="switchTab('household')" onclick="switchTab('household')">家計簿</button>
       <button id="tab-weather-btn" class="tab" data-tab="weather" ontouchstart="switchTab('weather')" onclick="switchTab('weather')">天気予報</button>
     </div>
 
@@ -395,6 +396,16 @@
             data-src="bike/index.html?embedded=1"></iframe>
   </div>
 
+  <div class="tab-content" id="tab-household">
+    <!-- 家計簿タブ。自己完結のHTMLを /household/ から配信し、認証は
+         postMessageで受け取る (liff.init は1ドキュメント1回まで)。
+         iframeの高さは固定px。calc(100vh - Npx) はLINE WebView内で
+         0に潰れて空白タブになる。 -->
+    <iframe id="household-frame" title="家計簿"
+            style="width:100%;height:900px;min-height:900px;border:0;display:block;background:#f5f6f8;"
+            data-src="household/index.html?embedded=1"></iframe>
+  </div>
+
   <div class="tab-content" id="tab-weather">
     <!-- Weather forecast tab. Inlined directly into the host page
          (not an iframe) because navigator.geolocation hangs silently
@@ -463,6 +474,7 @@
       console.log('switchTab called: ' + tabName);
       if (tabName === 'bento') ensureBentoFrame();
       if (tabName === 'bike') ensureBikeFrame();
+      if (tabName === 'household') ensureHouseholdFrame();
       if (tabName === 'weather') {
         if (!weatherTabLoaded) {
           weatherTabLoaded = true;
@@ -655,6 +667,11 @@
       if (ev.data.type === 'bike-ready') {
         log('bike iframe requested credentials');
         sendBikeCredentials();
+        return;
+      }
+      if (ev.data.type === 'household-ready') {
+        log('household iframe requested credentials');
+        sendHouseholdCredentials();
         return;
       }
     });
@@ -1031,6 +1048,72 @@
       }, 300);
     }
     function resetBikeCredentials() { bikeRetries = 0; }
+
+    // === HOUSEHOLD TAB (same pattern as bike) ===
+    var householdRetryTimer = null;
+    var HOUSEHOLD_MAX_RETRIES = 200;
+    var householdRetries = 0;
+
+    function ensureHouseholdFrame() {
+      var frame = document.getElementById('household-frame');
+      if (!frame) return;
+      if (frame.dataset.loaded !== '1') {
+        // household lives on the same origin as the host (this server serves
+        // /household/), so no apiBase override is needed; the child reads its
+        // own location.
+        frame.src = frame.dataset.src;
+        frame.dataset.loaded = '1';
+        log('ensureHouseholdFrame: loading ' + frame.src);
+      }
+      sendHouseholdCredentials();
+    }
+
+    function sendHouseholdCredentials() {
+      var frame = document.getElementById('household-frame');
+      if (!frame || !frame.contentWindow) return;
+      var cred = buildLiffCredentials();
+      if (!cred.lineUserId) {
+        diag('3b. 家計簿', 'userId 未取得（リトライ中）');
+        scheduleHouseholdCredentials();
+        return;
+      }
+      var payload = {
+        type: 'household-credentials',
+        lineUserId: cred.lineUserId,
+        idToken: cred.idToken,
+        authToken: getAuthToken(),
+        apiBase: window.location.origin,
+      };
+      frame.contentWindow.postMessage(payload, window.location.origin);
+      log('sendHouseholdCredentials: sent to household iframe');
+    }
+
+    function scheduleHouseholdCredentials() {
+      if (householdRetryTimer) return;
+      if (householdRetries >= HOUSEHOLD_MAX_RETRIES) {
+        log('sendHouseholdCredentials: giving up after ' + householdRetries + ' retries', true);
+        // Tell the iframe why it is stuck. Without this the iframe keeps its
+        // splash on screen forever, because the host simply goes quiet.
+        try {
+          var stuck = document.getElementById('household-frame');
+          if (stuck && stuck.contentWindow) {
+            stuck.contentWindow.postMessage({
+              type: 'household-auth-error',
+              message: whyLiffUnavailable(),
+            }, window.location.origin);
+          }
+        } catch (e) {
+          log('sendHouseholdCredentials: could not deliver auth error: ' + e.message, true);
+        }
+        return;
+      }
+      householdRetries++;
+      householdRetryTimer = setTimeout(function () {
+        householdRetryTimer = null;
+        sendHouseholdCredentials();
+      }, 300);
+    }
+    function resetHouseholdCredentials() { householdRetries = 0; }
 
     // === LOGGING ===
     var logEl = document.getElementById('debug-log');
