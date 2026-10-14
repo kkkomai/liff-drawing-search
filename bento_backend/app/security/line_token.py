@@ -1,9 +1,13 @@
 """LINE LIFF ID token verification.
 
-Verifies the ``id_token`` issued by ``liff.getDecodedIDToken()`` against LINE's
-JWKS endpoint (RS256), checking issuer, audience (channel id), expiry and
-nonce. Results are cached briefly per ``kid`` to avoid a JWKS round-trip on
-every request.
+Verifies the ``id_token`` issued by ``liff.getIDToken()`` against LINE's
+JWKS endpoint (ES256 per LINE's official docs — ECDSA P-256 + SHA-256;
+RS256 is also accepted), checking issuer, audience (channel id), expiry
+and nonce. Results are cached briefly per ``kid`` to avoid a JWKS
+round-trip on every request.
+
+The JWKS document URL is ``https://api.line.me/oauth2/v2.1/certs``
+(LINE Login docs). The older ``/oauth2/v3/keys`` path 404s.
 
 If ``BENTO_LINE_CHANNEL_ID`` / ``BENTO_LINE_CHANNEL_SECRET`` are not configured
 the app refuses to trust ID tokens unless an explicit dev token is supplied
@@ -112,7 +116,9 @@ def verify_id_token(
     kid = header.get("kid")
     if not kid:
         raise TokenError("invalid_id_token", "ID tokenにkidがありません。")
-    if header.get("alg") != "RS256":
+    # LINE の ID トークンは ES256（公式ドキュメント: ECDSA P-256 + SHA-256）。
+    # RS256 も許可するが、ES256 が本命。この allowlist 外（none 等）は拒否。
+    if header.get("alg") not in ("ES256", "RS256"):
         raise TokenError("invalid_id_token", "想定外の署名アルゴリズムです。")
 
     key = _cache_for(settings).get(kid)
@@ -120,7 +126,7 @@ def verify_id_token(
         claims = jwt.decode(
             id_token,
             key=key,
-            algorithms=["RS256"],
+            algorithms=["ES256", "RS256"],
             audience=settings.line_channel_id,
             issuer=settings.liff_issuer,
             options={"require": ["exp", "iat", "aud", "iss", "sub"]},

@@ -2,18 +2,21 @@
 
 A real RSA key pair is generated locally, a JWKS document is built from the
 public key, and httpx.get is stubbed so no network call is made. This exercises
-the production verification path (RS256, kid lookup, iss/aud/exp) rather than
-the dev-token shortcut.
+the production verification path (ES256/RS256, kid lookup, iss/aud/exp) rather
+than the dev-token shortcut.
+
+NOTE: LINE's actual ID tokens are **ES256** (ECDSA P-256 + SHA-256, per LINE's
+official docs) — see test_es256_token_is_accepted, which is the case that
+matches production. RS256 tests remain as the secondary accepted algorithm.
 """
 from __future__ import annotations
 
 import json
 import time
-from datetime import timedelta, timezone
 
 import jwt
 import pytest
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 from app.security import line_token
 from app.security.line_token import TokenError, verify_id_token
@@ -26,17 +29,25 @@ def rsa_key():
     return rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
 
-def jwk_for(rsa_key) -> dict:
-    """Public JWK dict for an RSA private key (PyJWT's to_jwk wants a key object)."""
-    jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(rsa_key.public_key()))
-    jwk.update({"kid": KID, "alg": "RS256", "use": "sig"})
+@pytest.fixture()
+def ec_key():
+    """EC P-256 key — the type LINE actually signs ID tokens with (ES256)."""
+    return ec.generate_private_key(ec.SECP256R1())
+
+
+def jwk_for(key) -> dict:
+    """Public JWK dict for an RSA or EC key object."""
+    if isinstance(key, rsa.RSAPrivateKey):
+        alg = "RS256"
+        jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(key.public_key()))
+    else:
+        alg = "ES256"
+        jwk = json.loads(jwt.algorithms.ECAlgorithm.to_jwk(key.public_key()))
+    jwk.update({"kid": KID, "alg": alg, "use": "sig"})
     return jwk
 
 
-@pytest.fixture()
-def jwks_stub(rsa_key, monkeypatch):
-    document = {"keys": [jwk_for(rsa_key)]}
-
+def _jwks_stub_for(document: dict, monkeypatch):
     class FakeResponse:
         status_code = 200
 
@@ -57,6 +68,16 @@ def jwks_stub(rsa_key, monkeypatch):
 
 
 @pytest.fixture()
+def jwks_stub(rsa_key, monkeypatch):
+    return _jwks_stub_for({"keys": [jwk_for(rsa_key)]}, monkeypatch)
+
+
+@pytest.fixture()
+def jwks_stub_ec(ec_key, monkeypatch):
+    return _jwks_stub_for({"keys": [jwk_for(ec_key)]}, monkeypatch)
+
+
+@pytest.fixture()
 def settings_env(monkeypatch):
     monkeypatch.setenv("BENTO_LINE_CHANNEL_ID", "1234567890")
     monkeypatch.setenv("BENTO_LINE_CHANNEL_SECRET", "secret-value")
@@ -69,7 +90,9 @@ def settings_env(monkeypatch):
     line_token._cache.clear()
 
 
-def make_token(rsa_key, **overrides):
+def make_token(key, alg=None, **overrides):
+    """Sign a token with the given key. alg defaults to the key's natural
+    algorithm (RS256 for RSA, ES256 for EC)."""
     now = int(time.time())
     claims = {
         "iss": "https://access.line.me",
@@ -80,12 +103,20 @@ def make_token(rsa_key, **overrides):
         "nonce": "n-abc",
     }
     claims.update(overrides)
-    headers = {"kid": KID, "alg": "RS256"}
-    return jwt.encode(claims, rsa_key, algorithm="RS256", headers=headers)
+    if alg is None:
+        alg = "RS256" if isinstance(key, rsa.RSAPrivateKey) else "ES256"
+    headers = {"kid": KID, "alg": alg}
+    return jwt.encode(claims, key, algorithm=alg, headers=headers)
 
 
 def test_valid_token_is_accepted(settings_env, rsa_key, jwks_stub):
     claims = verify_id_token(settings_env, make_token(rsa_key))
+    assert claims["sub"] == "Utest0002aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+
+def test_es256_token_is_accepted(settings_env, ec_key, jwks_stub_ec):
+    """LINE's real ID tokens are ES256 — this is the production case."""
+    claims = verify_id_token(settings_env, make_token(ec_key))
     assert claims["sub"] == "Utest0002aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 
@@ -133,6 +164,11 @@ def test_nonce_mismatch_rejected(settings_env, rsa_key, jwks_stub):
 
 def test_nonce_match_accepted(settings_env, rsa_key, jwks_stub):
     verify_id_token(settings_env, make_token(rsa_key), nonce="n-abc")
+
+
+def test_es256_nonce_match_accepted(settings_env, ec_key, jwks_stub_ec):
+    """ES256（本番と同じアルゴリズム）でも nonce 検証が機能すること。"""
+    verify_id_token(settings_env, make_token(ec_key), nonce="n-abc")
 
 
 def test_jwks_is_cached(settings_env, rsa_key, jwks_stub):

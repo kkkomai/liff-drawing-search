@@ -59,7 +59,10 @@ class Settings(BaseSettings):
     # 長らく露見しなかった。2026-10-14 修正。
     # BENTO_LIFF_ISSUER で上書き可能（通常は不要）。
     liff_issuer: str = Field(default="https://access.line.me")
-    liff_jwks_url: str = Field(default="https://api.line.me/oauth2/v3/keys")
+    # JWKS は LINE Login ドキュメントの /oauth2/v2.1/certs。
+    # 旧既定値 /oauth2/v3/keys は 404 で JWKS 取得に失敗していた。
+    # 鍵は EC/ES256。2026-10-14 修正。
+    liff_jwks_url: str = Field(default="https://api.line.me/oauth2/v2.1/certs")
     jwks_cache_seconds: int = Field(default=3600)
 
     # --- LINE Messaging API (pushing the LIFF app URL to users) -----------
