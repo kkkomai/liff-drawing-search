@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#16a34a" />
+  <title>社員管理 - 管理ページ</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --fg: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --accent: #16a34a;
+      --accent-fg: #ffffff;
+      --danger: #dc2626;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--bg); color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", "Segoe UI", sans-serif;
+      font-size: 15px; line-height: 1.6;
+    }
+    header {
+      background: var(--accent); color: var(--accent-fg);
+      padding: 14px 16px; font-size: 17px; font-weight: 600;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    header .sub { font-size: 12px; font-weight: 400; opacity: 0.85; }
+    main { max-width: 860px; margin: 0 auto; padding: 16px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 20px; margin-bottom: 16px;
+    }
+    .card h2 { margin: 0 0 14px; font-size: 16px; }
+    .row { margin-bottom: 14px; }
+    .row label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+    .row input, .row select {
+      width: 100%; padding: 10px 12px; font-size: 15px;
+      border: 1px solid var(--border); border-radius: 8px; background: #fff;
+    }
+    .row input:focus, .row select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    button {
+      padding: 11px 20px; font-size: 15px; border: none; border-radius: 8px;
+      cursor: pointer; font-weight: 600;
+    }
+    .btn-primary { background: var(--accent); color: var(--accent-fg); width: 100%; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-ghost { background: #fff; color: #334155; border: 1px solid var(--border); padding: 7px 14px; font-size: 13px; }
+    .btn-danger { background: #fff; color: var(--danger); border: 1px solid #fecaca; padding: 7px 14px; font-size: 13px; }
+    .btn-danger:hover { background: #fef2f2; }
+    .banner {
+      padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px;
+      white-space: pre-wrap; word-break: break-all;
+    }
+    .banner-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    .banner-info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+    .banner-ok { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+    td .uid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #475569; word-break: break-all; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; color: #fff;
+    }
+    .badge-active { background: var(--accent); }
+    .badge-inactive { background: #94a3b8; }
+    .badge-role-admin { background: #7c3aed; }
+    .badge-role-emp { background: #64748b; }
+    .actions { white-space: nowrap; }
+    .actions button { margin-left: 6px; }
+    .empty { text-align: center; color: var(--muted); padding: 28px 0; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+    @media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } }
+    .toast {
+      position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+      background: #0f172a; color: #fff; padding: 10px 18px; border-radius: 8px;
+      font-size: 14px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 100;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { background: var(--danger); }
+    .center-wrap { display: flex; align-items: center; justify-content: center; min-height: 70vh; }
+    .login-card { width: 100%; max-width: 400px; }
+    .logout-link { color: var(--accent-fg); font-size: 12px; cursor: pointer; text-decoration: underline; background: none; padding: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <span>⚙️ 社員管理</span>
+    <span class="sub" id="header-sub">管理ページ</span>
+  </header>
+
+  <main>
+    <!-- セットアップ (初回のみ: 管理者アカウントが未作成の時) -->
+    <div id="setup-view" class="center-wrap" style="display:none;">
+      <div class="card login-card">
+        <h2>初期セットアップ</h2>
+        <div class="banner banner-info">
+          この管理ページを利用する管理者アカウントを作成します。<br>
+          社員マスタの追加・編集・削除ができるようになります。
+        </div>
+        <div class="row">
+          <label for="su-user">ユーザー名（ログイン用）</label>
+          <input type="text" id="su-user" autocomplete="username" placeholder="例: iwano" />
+        </div>
+        <div class="row">
+          <label for="su-pass">パスワード（8文字以上）</label>
+          <input type="password" id="su-pass" autocomplete="new-password" placeholder="8文字以上" />
+        </div>
+        <div class="row">
+          <label for="su-pass2">パスワード（確認）</label>
+          <input type="password" id="su-pass2" autocomplete="new-password" />
+        </div>
+        <div class="row">
+          <label for="su-name">表示名（任意）</label>
+          <input type="text" id="su-name" placeholder="例: 岩野" />
+        </div>
+        <div id="setup-error" class="banner banner-error" style="display:none;"></div>
+        <button class="btn-primary" id="setup-btn">管理者アカウントを作成</button>
+      </div>
+    </div>
+
+    <!-- ログイン -->
+    <div id="login-view" class="center-wrap" style="display:none;">
+      <div class="card login-card">
+        <h2>ログイン</h2>
+        <div class="row">
+          <label for="li-user">ユーザー名</label>
+          <input type="text" id="li-user" autocomplete="username" />
+        </div>
+        <div class="row">
+          <label for="li-pass">パスワード</label>
+          <input type="password" id="li-pass" autocomplete="current-password" />
+        </div>
+        <div id="login-error" class="banner banner-error" style="display:none;"></div>
+        <button class="btn-primary" id="login-btn">ログイン</button>
+      </div>
+    </div>
+
+    <!-- 管理画面 -->
+    <div id="app-view" style="display:none;">
+      <div class="card">
+        <h2>社員マスタ <span class="hint" id="emp-count"></span></h2>
+        <div id="emp-error" class="banner banner-error" style="display:none;"></div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>社員コード</th><th>氏名</th><th>LINEユーザーID</th><th>権限</th><th>状態</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="emp-tbody"></tbody>
+          </table>
+        </div>
+        <div id="emp-empty" class="empty" style="display:none;">社員が登録されていません</div>
+      </div>
+
+      <div class="card">
+        <h2 id="form-title">社員を追加</h2>
+        <form id="emp-form" onsubmit="return false;">
+          <div class="form-grid">
+            <div class="row">
+              <label for="f-code">社員コード *</label>
+              <input type="text" id="f-code" placeholder="例: E003" maxlength="20" />
+            </div>
+            <div class="row">
+              <label for="f-name">氏名 *</label>
+              <input type="text" id="f-name" placeholder="例: 山田太郎" maxlength="50" />
+            </div>
+          </div>
+          <div class="row">
+            <label for="f-line">LINEユーザーID（U...）</label>
+            <input type="text" id="f-line" placeholder="U4786cd63cad2f9cf56f6c01494d5cb0e" />
+            <div class="hint">
+              対象者がLIFFアプリを開いた時のエラー画面（診断トレースの userId= の値）を入力してください。
+              未入力でも登録できますが、ログインできません。
+            </div>
+          </div>
+          <div class="form-grid">
+            <div class="row">
+              <label for="f-role">権限</label>
+              <select id="f-role">
+                <option value="employee">一般 (employee)</option>
+                <option value="admin">管理者 (admin)</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="f-active">状態</label>
+              <select id="f-active">
+                <option value="1">有効</option>
+                <option value="0">無効</option>
+              </select>
+              <div class="hint">無効にするとLIFFアプリにログインできません</div>
+            </div>
+          </div>
+          <div id="form-error" class="banner banner-error" style="display:none;"></div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn-primary" id="save-btn" style="flex:2;">保存</button>
+            <button class="btn-ghost" id="cancel-btn" style="flex:1;display:none;">キャンセル</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ===== 状態 =====
+    var editingId = null;   // null=新規, 数値=編集中の社員ID
+    var employees = [];
+
+    function $(id) { return document.getElementById(id); }
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[<>&"']/g, function (c) {
+        return { '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;' }[c];
+      });
+    }
+    function showToast(msg, isError) {
+      var el = $('toast');
+      el.textContent = msg;
+      el.className = 'toast show' + (isError ? ' error' : '');
+      setTimeout(function () { el.className = 'toast' + (isError ? ' error' : ''); }, 2600);
+    }
+    function showBanner(id, msg) {
+      var el = $(id);
+      if (!msg) { el.style.display = 'none'; return; }
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    // ===== API =====
+    // 同一オリジン。ログイン時に httpOnly Cookie が自動送信される。
+    function api(path, opts) {
+      opts = opts || {};
+      opts.credentials = 'same-origin';
+      if (opts.body && !opts.headers) opts.headers = { 'Content-Type': 'application/json' };
+      return fetch(path, opts).then(function (r) {
+        return r.text().then(function (body) {
+          var j = null;
+          try { j = JSON.parse(body); } catch (e) { /* non-JSON */ }
+          if (!r.ok) {
+            var msg = (j && j.detail && (j.detail.message || j.detail)) || ('HTTP ' + r.status);
+            var err = new Error(msg); err.status = r.status;
+            throw err;
+          }
+          return j || {};
+        });
+      });
+    }
+
+    // ===== 画面遷移 =====
+    function showView(name) {
+      ['setup-view', 'login-view', 'app-view'].forEach(function (v) {
+        $(v).style.display = (v === name) ? '' : 'none';
+      });
+      if (name === 'app-view') {
+        $('setup-view').style.display = 'none';
+        $('login-view').style.display = 'none';
+      }
+    }
+
+    function boot() {
+      api('/api/admin-auth/status').then(function (j) {
+        if (j.setup_required) {
+          showView('setup-view');
+        } else {
+          showView('login-view');
+        }
+      }).catch(function (e) {
+        // サーバー未起動など。ログイン画面を出してリトライ可能に。
+        showView('login-view');
+        showBanner('login-error', 'サーバーに接続できません: ' + e.message);
+      });
+      // 既にログイン済みならmeで確認
+      api('/api/admin-auth/me').then(function (j) {
+        if (j.success) { enterApp(j.admin); }
+      }).catch(function () { /* 未ログイン: boot の status 判定に任せる */ });
+    }
+
+    function enterApp(admin) {
+      $('header-sub').textContent = (admin && admin.display_name) ? admin.display_name + ' でログイン中' : 'ログイン中';
+      showView('app-view');
+      resetForm();
+      loadEmployees();
+    }
+
+    // ===== セットアップ =====
+    $('setup-btn').addEventListener('click', function () {
+      var u = $('su-user').value.trim();
+      var p = $('su-pass').value;
+      var p2 = $('su-pass2').value;
+      var n = $('su-name').value.trim();
+      if (!u || !p) { showBanner('setup-error', 'ユーザー名とパスワードを入力してください。'); return; }
+      if (p.length < 8) { showBanner('setup-error', 'パスワードは8文字以上にしてください。'); return; }
+      if (p !== p2) { showBanner('setup-error', 'パスワードが確認用と一致しません。'); return; }
+      showBanner('setup-error', '');
+      api('/api/admin-auth/setup', {
+        method: 'POST',
+        body: JSON.stringify({ username: u, password: p, display_name: n })
+      }).then(function (j) {
+        if (j.success) { showToast('管理者アカウントを作成しました'); enterApp(j.admin); }
+      }).catch(function (e) {
+        showBanner('setup-error', e.message);
+      });
+    });
+
+    // ===== ログイン / ログアウト =====
+    $('login-btn').addEventListener('click', doLogin);
+    $('li-pass').addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
+
+    function doLogin() {
+      var u = $('li-user').value.trim();
+      var p = $('li-pass').value;
+      showBanner('login-error', '');
+      api('/api/admin-auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username: u, password: p })
+      }).then(function (j) {
+        if (j.success) { showToast('ログインしました'); enterApp(j.admin); }
+      }).catch(function (e) {
+        showBanner('login-error', e.message);
+      });
+    }
+
+    // ===== 社員一覧 =====
+    function loadEmployees() {
+      showBanner('emp-error', '');
+      api('/api/admin/employees').then(function (j) {
+        employees = j.employees || [];
+        renderEmployees();
+      }).catch(function (e) {
+        showBanner('emp-error', '社員一覧の取得に失敗: ' + e.message);
+      });
+    }
+
+    function renderEmployees() {
+      var tbody = $('emp-tbody');
+      $('emp-count').textContent = employees.length + '件';
+      if (!employees.length) {
+        tbody.innerHTML = '';
+        $('emp-empty').style.display = '';
+        return;
+      }
+      $('emp-empty').style.display = 'none';
+      tbody.innerHTML = employees.map(function (e) {
+        var roleBadge = e.role === 'admin'
+          ? '<span class="badge badge-role-admin">管理者</span>'
+          : '<span class="badge badge-role-emp">一般</span>';
+        var activeBadge = e.is_active
+          ? '<span class="badge badge-active">有効</span>'
+          : '<span class="badge badge-inactive">無効</span>';
+        return '<tr>' +
+          '<td>' + esc(e.employee_code) + '</td>' +
+          '<td>' + esc(e.name) + '</td>' +
+          '<td>' + (e.line_user_id
+            ? '<div class="uid">' + esc(e.line_user_id) + '</div>'
+            : '<span style="color:#94a3b8;font-size:12px;">未設定</span>') + '</td>' +
+          '<td>' + roleBadge + '</td>' +
+          '<td>' + activeBadge + '</td>' +
+          '<td class="actions">' +
+            '<button class="btn-ghost" data-edit="' + e.id + '">編集</button>' +
+            '<button class="btn-danger" data-del="' + e.id + '">削除</button>' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+      tbody.querySelectorAll('[data-edit]').forEach(function (btn) {
+        btn.addEventListener('click', function () { startEdit(Number(btn.getAttribute('data-edit'))); });
+      });
+      tbody.querySelectorAll('[data-del]').forEach(function (btn) {
+        btn.addEventListener('click', function () { deleteEmployee(Number(btn.getAttribute('data-del'))); });
+      });
+    }
+
+    // ===== 追加 / 編集 =====
+    function resetForm() {
+      editingId = null;
+      $('form-title').textContent = '社員を追加';
+      $('f-code').value = '';
+      $('f-name').value = '';
+      $('f-line').value = '';
+      $('f-role').value = 'employee';
+      $('f-active').value = '1';
+      $('cancel-btn').style.display = 'none';
+      showBanner('form-error', '');
+    }
+
+    function startEdit(id) {
+      var e = employees.find(function (x) { return x.id === id; });
+      if (!e) return;
+      editingId = id;
+      $('form-title').textContent = '編集: ' + e.name + ' (' + e.employee_code + ')';
+      $('f-code').value = e.employee_code || '';
+      $('f-name').value = e.name || '';
+      $('f-line').value = e.line_user_id || '';
+      $('f-role').value = e.role || 'employee';
+      $('f-active').value = e.is_active ? '1' : '0';
+      $('cancel-btn').style.display = '';
+      showBanner('form-error', '');
+      $('form-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    $('cancel-btn').addEventListener('click', resetForm);
+
+    $('save-btn').addEventListener('click', function () {
+      var code = $('f-code').value.trim();
+      var name = $('f-name').value.trim();
+      var line = $('f-line').value.trim();
+      var role = $('f-role').value;
+      var active = $('f-active').value === '1' ? 1 : 0;
+      if (!code || !name) { showBanner('form-error', '社員コードと氏名は必須です。'); return; }
+      showBanner('form-error', '');
+      var payload = {
+        employee_code: code,
+        name: name,
+        line_user_id: line || null,
+        role: role,
+        is_active: active
+      };
+      var req = editingId
+        ? api('/api/admin/employees/' + editingId, { method: 'PUT', body: JSON.stringify(payload) })
+        : api('/api/admin/employees', { method: 'POST', body: JSON.stringify(payload) });
+      req.then(function (j) {
+        if (j.success) {
+          showToast(editingId ? '更新しました' : '追加しました');
+          resetForm();
+          loadEmployees();
+        }
+      }).catch(function (e) {
+        showBanner('form-error', e.message);
+      });
+    });
+
+    function deleteEmployee(id) {
+      var e = employees.find(function (x) { return x.id === id; });
+      var label = e ? (e.name + ' (' + e.employee_code + ')') : ('ID ' + id);
+      if (!confirm(label + ' を削除しますか？\nこの社員のお弁当注文データも削除されます。')) return;
+      api('/api/admin/employees/' + id, { method: 'DELETE' }).then(function (j) {
+        if (j.success) { showToast('削除しました'); loadEmployees(); }
+      }).catch(function (e) {
+        showBanner('emp-error', '削除に失敗: ' + e.message);
+      });
+    }
+
+    boot();
+  </script>
+</body>
+</html>

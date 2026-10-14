@@ -1068,7 +1068,7 @@ async def delete_household_expense(expense_id: str, request: Request) -> JSONRes
 # --------------------------------------------------------------------------- #
 
 try:
-    from app.api import admin, auth, orders  # type: ignore
+    from app.api import admin, admin_auth, auth, orders  # type: ignore
     from app.api import config_api as _config_api  # type: ignore
     from app.db import get_conn as _bento_get_conn, migrate as _bento_migrate  # type: ignore
 
@@ -1076,6 +1076,7 @@ try:
     app.include_router(auth.router)
     app.include_router(orders.router)
     app.include_router(admin.router)
+    app.include_router(admin_auth.router)
 
     # Run the migrations here, not just inside the bento FastAPI app's lifespan.
     # This app only *includes* the bento routers, so that lifespan never runs and
@@ -1344,6 +1345,17 @@ async def index() -> FileResponse:
 @app.get("/form.html")
 async def form() -> FileResponse:
     return FileResponse(BASE_DIR / "form.html", headers=_NO_CACHE)
+
+
+@app.get("/admin.html")
+async def admin_page() -> FileResponse:
+    """社員マスタの管理ページ。LIFFアプリとは別に、普通のブラウザから開く。
+
+    認証は /api/admin-auth (ユーザー名+パスワード, httpOnlyセッションCookie)。
+    LIFFのLINE認証とは完全に独立した認証系。 /api/admin/employees の
+    CRUD はこの管理ページ認証(current_admin_user)で保護される。
+    """
+    return FileResponse(BASE_DIR / "admin.html", headers=_NO_CACHE)
 
 
 # --------------------------------------------------------------------------- #

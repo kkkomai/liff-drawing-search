@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .api import admin, auth, config_api, orders
+from .api import admin, admin_auth, auth, config_api, orders
 from .config import assert_production_ready, get_settings
 from .db import get_conn, migrate
 from .errors import ApiError
@@ -76,6 +76,8 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(orders.router)
     app.include_router(admin.router)
+    # 管理ページ (/admin.html) の認証。LIFF とは別系統。
+    app.include_router(admin_auth.router)
 
     # Optionally serve the LIFF page from the same origin. When BENTO_FRONTEND_DIR
     # is set, the LIFF endpoint URL and the API share one https origin, so the
