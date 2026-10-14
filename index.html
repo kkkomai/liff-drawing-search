@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261013tabs</title>
+  <title>申請フォーム - v20261013diag</title>
   <script>window.__v="20261013household";</script>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/manifest-icon-192.png">
@@ -206,9 +206,45 @@
       <div style="font-size:48px;margin-bottom:12px;">🔒</div>
       <h2 id="auth-failure-title" style="margin:0 0 8px;font-size:18px;color:#0f172a;">認証に失敗しました</h2>
       <p id="auth-failure-body" style="margin:0 0 16px;color:#64748b;font-size:14px;line-height:1.6;"></p>
-      <p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.5;">管理者にご連絡のうえ、employees テーブルへの登録をご確認ください。</p>
+      <!-- 診断トレース。diag() が随時ここに書き込む。要素が無いと
+           全トレースが行き場を失い「汎用エラーしか見えない」状態になる
+           (2026-10-14 実績: getElementById('diag-panel') は JS にあったが
+           HTML に要素が無かった)。認証失敗時にのみ表示される。 -->
+      <div style="margin:12px 0 8px;text-align:left;">
+        <div style="font-size:12px;color:#64748b;margin-bottom:4px;">診断トレース（スクリーンショットでお知らせください）:</div>
+        <div id="diag-panel" style="background:#0f172a;color:#a5f3fc;border-radius:8px;padding:10px;font-size:13px;line-height:1.7;max-height:46vh;overflow:auto;white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;"></div>
+        <button type="button" id="diag-copy-btn" style="margin-top:6px;padding:6px 14px;font-size:13px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#334155;cursor:pointer;">トレースをコピー</button>
+      </div>
+      <p style="margin:8px 0 0;color:#94a3b8;font-size:12px;line-height:1.5;">管理者にご連絡のうえ、employees テーブルへの登録をご確認ください。</p>
     </div>
   </div>
+
+  <script>
+    // 診断トレースのコピーボタン。async clipboard API は一部の
+    // WebView に無いので selectNodeContents フォールバックを必ず持つ。
+    (function () {
+      var btn = document.getElementById('diag-copy-btn');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var panel = document.getElementById('diag-panel');
+        var text = panel ? panel.textContent : '';
+        function done() { btn.textContent = 'コピーしました'; setTimeout(function () { btn.textContent = 'トレースをコピー'; }, 2000); }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, function () { fallback(); });
+        } else { fallback(); }
+        function fallback() {
+          try {
+            var range = document.createRange();
+            range.selectNodeContents(panel);
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            done();
+          } catch (e) { btn.textContent = '長押しでコピーしてください'; }
+        }
+      });
+    })();
+  </script>
 
   <script>
     // The guard element exists above this script, so we can manipulate it
@@ -2492,6 +2528,9 @@ liff.init({
             setTimeout(function () { authenticateWithBento(retry + 1); }, 1000);
           } else {
             log('authenticateWithBento: idToken stays null after 20s; attempting login without id_token (will fail unless allow_login_without_id_token=true)', true);
+            // 診断パネルにも残す。openid スコープが未設定/未保存の場合、
+            // getDecodedIDToken() のエラーと合わせて原因が特定できる。
+            diag('4. IDトークン', 'liff.idToken() が20秒たってもnull（openidスコープ未設定の可能性）');
           }
           // Either way (token arrived or we gave up waiting), fall through
           // and POST. The empty string for id_token is a valid value when
