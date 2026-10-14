@@ -32,13 +32,16 @@ def _parse_database_url() -> str:
 
 @contextmanager
 def _connect() -> Iterator["psycopg.Connection"]:
-    import psycopg  # imported lazily so the import is optional
+    """Yield the shared process-wide connection (pg_pool).
 
-    conn = psycopg.connect(_parse_database_url(), autocommit=True)
-    try:
-        yield conn
-    finally:
-        conn.close()
+    The old per-call connect paid a ~0.6s Neon handshake on every
+    request; reuse answers in ~0.08s. A dead socket after a Render
+    cold-start is transparently reconnected inside pg_pool.get_conn()
+    via the closed/broken check.
+    """
+    import pg_pool
+
+    yield pg_pool.get_conn()
 
 
 def _ensure_schema() -> None:

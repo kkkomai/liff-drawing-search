@@ -28,24 +28,17 @@ def _parse_database_url() -> str:
 
 @contextmanager
 def _connect() -> Iterator["psycopg.Connection"]:
-    """Open a fresh connection per call.
+    """Yield the shared process-wide connection (pg_pool).
 
-    A long-lived psycopg connection does not survive a Render cold-start;
-    on the first request after a 15-minute sleep cycle the held socket is
-    dead and the next execute() raises ``the connection is closed``. We
-    already pay one connect per operation on schedules_db without trouble,
-    so the same pattern is used here.
+    The old per-call connect paid a ~0.6s Neon handshake on every
+    request; reuse answers in ~0.08s. A dead socket after a Render
+    cold-start is transparently reconnected inside pg_pool.get_conn()
+    via the closed/broken check, so the failure mode the fresh-connect
+    design was working around is handled without the cost.
     """
-    import psycopg  # imported lazily so the import is optional
+    import pg_pool
 
-    conn = psycopg.connect(_parse_database_url(), autocommit=True)
-    try:
-        yield conn
-    finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+    yield pg_pool.get_conn()
 
 
 def _ensure_schema() -> None:

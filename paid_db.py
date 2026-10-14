@@ -27,16 +27,15 @@ def _parse_database_url() -> str:
 
 @contextmanager
 def _connect() -> Iterator["psycopg.Connection"]:
-    """One connection per call (same reason as schedules_db / bike_db)."""
-    import psycopg  # lazy
-    conn = psycopg.connect(_parse_database_url(), autocommit=True)
-    try:
-        yield conn
-    finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+    """Yield the shared process-wide connection (pg_pool).
+
+    Reusing one connection turns each ~0.6s Neon handshake into ~0.08s;
+    a dead socket after a Render cold-start is transparently
+    reconnected inside pg_pool.get_conn() via the closed/broken check.
+    """
+    import pg_pool
+
+    yield pg_pool.get_conn()
 
 
 def _ensure_schema() -> None:
