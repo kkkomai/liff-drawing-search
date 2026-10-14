@@ -1860,22 +1860,44 @@ var __el = document.getElementById('adjust-aspect');
                 return;
             }
             paidSubmitBtn.disabled = true;
+            var originalLabel = paidSubmitBtn.textContent;
+            paidSubmitBtn.textContent = '送信中...';
             fetch('/paid-leave', {
                 method: 'POST',
                 headers: paidHeaders(),
                 body: JSON.stringify({ date: date, type: type, reason: reason }),
             }).then(function (resp) {
-                paidSubmitBtn.disabled = false;
-                if (resp.ok) {
-                    document.getElementById('paid-date').value = '';
-                    document.getElementById('paid-reason').value = '';
-                    showToast('有休申請を送信しました');
-                    loadPaidHistories();
-                } else {
-                    showToast('送信失敗: HTTP ' + resp.status, true);
-                }
+                return resp.json().catch(function () { return null; }).then(function (data) {
+                    paidSubmitBtn.disabled = false;
+                    paidSubmitBtn.textContent = originalLabel;
+                    if (resp.ok) {
+                        document.getElementById('paid-date').value = '';
+                        document.getElementById('paid-reason').value = '';
+                        showToast('有休申請を送信しました');
+                        // 楽観的更新: POST の返り値をその場で履歴に追加する。
+                        // DBラウンドトリップ（INSERT+LIST で約3秒）を待たずに
+                        // 履歴を即座に描画する（体感速度の改善）。
+                        if (data && data.leave) {
+                            var already = paidHistories.some(function (h) { return h.id === data.leave.id; });
+                            if (!already) {
+                                paidHistories.unshift(data.leave);
+                                // サーバーと同じ日付降順に整列（古い日付の申請でも順序が狂わない）
+                                paidHistories.sort(function (a, b) {
+                                    return String(b.date || '').localeCompare(String(a.date || ''));
+                                });
+                                renderPaidHistories();
+                            }
+                        }
+                        // 裏で完全リフレッシュ（他端末の申請を取り込む等の整合性確認）
+                        loadPaidHistories();
+                    } else {
+                        var msg = (data && data.detail) ? JSON.stringify(data.detail) : ('HTTP ' + resp.status);
+                        showToast('送信失敗: ' + msg, true);
+                    }
+                });
             }).catch(function (err) {
                 paidSubmitBtn.disabled = false;
+                paidSubmitBtn.textContent = originalLabel;
                 showToast('送信失敗: ' + err.message, true);
             });
         };
