@@ -7,6 +7,7 @@ schedules and bike-logs, so no new env var is required.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from contextlib import contextmanager
 from typing import Iterator
