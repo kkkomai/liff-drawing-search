@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#16a34a" />
   <title>社員管理 - 管理ページ</title>
+  <!-- liff_admin (LIFFアプリ) から開く場合に備えて LIFF SDK を読み込む。
+       通常ブラウザから開いた場合は init が失敗しパスワード認証にフォールバック。 -->
+  <script src="/sdk.js"></script>
   <style>
     :root {
       color-scheme: light;
@@ -214,6 +217,10 @@
     // ===== 状態 =====
     var editingId = null;   // null=新規, 数値=編集中の社員ID
     var employees = [];
+    // LINE認証モード (liff_admin から開いた場合) の bento セッショントークン。
+    // 空ならパスワード認証モード (httpOnly Cookie が自動送信される)。
+    var lineToken = '';
+    var authKind = '';
 
     function $(id) { return document.getElementById(id); }
     function esc(s) {
@@ -236,9 +243,13 @@
 
     // ===== API =====
     // 同一オリジン。ログイン時に httpOnly Cookie が自動送信される。
+    // LINE認証モード(liff_admin)では bento セッショントークンを Bearer で送る。
     function api(path, opts) {
       opts = opts || {};
       opts.credentials = 'same-origin';
+      if (lineToken) {
+        opts.headers = Object.assign({}, opts.headers, { 'Authorization': 'Bearer ' + lineToken });
+      }
       if (opts.body && !opts.headers) opts.headers = { 'Content-Type': 'application/json' };
       return fetch(path, opts).then(function (r) {
         return r.text().then(function (body) {
@@ -265,26 +276,71 @@
       }
     }
 
-    function boot() {
-      api('/api/admin-auth/status').then(function (j) {
-        if (j.setup_required) {
-          showView('setup-view');
-        } else {
-          showView('login-view');
+    // liff_admin (LIFFアプリ) から開かれた場合の LINE 認証。
+    // 通常ブラウザや init 失敗時は false を返しパスワード認証にフォールバック。
+    async function tryLiffAuth() {
+      if (typeof liff === 'undefined') return false;
+      try {
+        await Promise.race([
+          liff.init({ liffId: '2011376207-A9Fpo40J', scope: ['openid', 'profile'] }),
+          new Promise(function (_, reject) { setTimeout(function () { reject(new Error('timeout')); }, 10000); })
+        ]);
+        if (typeof liff.isInClient !== 'function' || !liff.isInClient() || !liff.isLoggedIn()) {
+          return false;  // LINE外（ブラウザ直開き）→ パスワード認証へ
         }
-      }).catch(function (e) {
-        // サーバー未起動など。ログイン画面を出してリトライ可能に。
-        showView('login-view');
-        showBanner('login-error', 'サーバーに接続できません: ' + e.message);
+        var lineUserId = liff.getContext().userId;
+        // 生JWTは liff.getIDToken()（同期）。getDecodedIDToken() は
+        // 復号payloadのみで .jwt は存在しない（SDK v2.31 実測）。
+        var idToken = liff.getIDToken() || '';
+        var r = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ line_user_id: lineUserId, id_token: idToken }),
+        });
+        if (!r.ok) {
+          var body = await r.text();
+          // パスワードフォールバックを見せつつ、失敗理由を表示
+          showView('login-view');
+          showBanner('login-error', 'LINE認証に失敗しました: ' + body.slice(0, 240));
+          return false;
+        }
+        var j = await r.json();
+        lineToken = j.token;
+        authKind = 'line';
+        enterApp({ username: '(LINE)', display_name: (j.employee && j.employee.name) || '管理者' });
+        return true;
+      } catch (e) {
+        // SDK未読込 / LINE外 / タイムアウト → パスワード認証へ
+        return false;
+      }
+    }
+
+    function boot() {
+      // まず LINE 認証を試し、だめならパスワード認証（status/me 確認）。
+      tryLiffAuth().then(function (ok) {
+        if (ok) return;
+        api('/api/admin-auth/status').then(function (j) {
+          if (j.setup_required) {
+            showView('setup-view');
+          } else {
+            showView('login-view');
+          }
+        }).catch(function (e) {
+          // サーバー未起動など。ログイン画面を出してリトライ可能に。
+          showView('login-view');
+          showBanner('login-error', 'サーバーに接続できません: ' + e.message);
+        });
+        // 既にログイン済みならmeで確認
+        api('/api/admin-auth/me').then(function (j) {
+          if (j.success) { enterApp(j.admin); }
+        }).catch(function () { /* 未ログイン: boot の status 判定に任せる */ });
       });
-      // 既にログイン済みならmeで確認
-      api('/api/admin-auth/me').then(function (j) {
-        if (j.success) { enterApp(j.admin); }
-      }).catch(function () { /* 未ログイン: boot の status 判定に任せる */ });
     }
 
     function enterApp(admin) {
-      $('header-sub').textContent = (admin && admin.display_name) ? admin.display_name + ' でログイン中' : 'ログイン中';
+      $('header-sub').textContent = (admin && admin.display_name)
+        ? admin.display_name + ' でログイン中' + (authKind === 'line' ? '（LINE認証）' : '')
+        : 'ログイン中';
       showView('app-view');
       resetForm();
       loadEmployees();

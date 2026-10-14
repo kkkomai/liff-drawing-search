@@ -3,7 +3,7 @@ plus the 申請フォーム → LIFF app URL push (admin only).
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from ..db import bind, get_conn
@@ -12,13 +12,42 @@ from ..models import AdminDayOut, AdminRangeOut, AdminSummary
 from ..services.line_form import LineFormError, get_liff_app_link, push_liff_app_url
 from ..services.orders import admin_day, admin_range
 from ..timeutil import parse_date, today_tokyo, now_tokyo_iso
-from .admin_auth import current_admin_user
-from .deps import require_admin
+from .admin_auth import _admin_token, current_admin_user
+from .deps import current_employee, require_admin
+from ..security import admin_auth
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 _LINE_USER_ID_MIN = 8
 _LINE_USER_ID_MAX = 100
+
+
+def current_admin_page_user(request: Request) -> dict:
+    """管理ページの認証。2つの経路を許可する:
+
+    1. admin_users のパスワードセッション（cookie または Bearer）
+       — ブラウザから /admin.html を直接開く経路
+    2. bento の LINE セッション（Bearer, role=admin）
+       — liff_admin (LIFFアプリ) から開く経路。
+         id_token 検証済みのLINE認証 + employees テーブルの管理者ロール。
+
+    LIFFアプリ側は liff_admin の liffId で init し /api/auth/login で
+    bento セッショントークンを取得して Bearer で送る。
+    """
+    token = _admin_token(request)
+    if token:
+        admin = admin_auth.resolve_admin_session(get_conn(), token)
+        if admin is not None:
+            return {"kind": "password", "name": admin.get("display_name") or admin.get("username") or "管理者"}
+    # ここに来た = cookie/Bearer は admin_users セッションではなかった。
+    # Bearer が bento の LINE セッションなら role=admin を確認して通す。
+    header = request.headers.get("Authorization") or ""
+    if header.lower().startswith("bearer "):
+        employee = current_employee(request)  # 無効/期限切れは 401
+        if employee.get("role") != "admin":
+            raise forbidden("admin_required", "この操作は管理者のみ実行できます。")
+        return {"kind": "line", "name": employee.get("name") or "管理者"}
+    raise unauthorized("管理ページへのログインが必要です。")
 
 
 class LiffPushRequest(BaseModel):
@@ -77,7 +106,7 @@ def _fetch_employee(conn, employee_id: int):
 
 
 @router.get("/employees")
-def admin_list_employees(_: dict = Depends(current_admin_user)) -> dict:
+def admin_list_employees(admin_user: dict = Depends(current_admin_page_user)) -> dict:
     """社員マスタ一覧 (管理ページ用)。LIFF ではなく管理ページ認証で保護。"""
     conn = get_conn()
     rows = conn.execute(
@@ -90,7 +119,7 @@ def admin_list_employees(_: dict = Depends(current_admin_user)) -> dict:
 
 
 @router.post("/employees")
-def admin_create_employee(body: EmployeeCreateRequest, _: dict = Depends(current_admin_user)) -> dict:
+def admin_create_employee(body: EmployeeCreateRequest, admin_user: dict = Depends(current_admin_page_user)) -> dict:
     conn = get_conn()
     line_id = (body.line_user_id or "").strip() or None
     try:
@@ -124,7 +153,7 @@ def admin_create_employee(body: EmployeeCreateRequest, _: dict = Depends(current
 
 
 @router.put("/employees/{employee_id}")
-def admin_update_employee(employee_id: int, body: EmployeeUpdateRequest, _: dict = Depends(current_admin_user)) -> dict:
+def admin_update_employee(employee_id: int, body: EmployeeUpdateRequest, admin_user: dict = Depends(current_admin_page_user)) -> dict:
     conn = get_conn()
     current = _fetch_employee(conn, employee_id)
     if current is None:
@@ -165,7 +194,7 @@ def admin_update_employee(employee_id: int, body: EmployeeUpdateRequest, _: dict
 
 
 @router.delete("/employees/{employee_id}")
-def admin_delete_employee(employee_id: int, _: dict = Depends(current_admin_user)) -> dict:
+def admin_delete_employee(employee_id: int, admin_user: dict = Depends(current_admin_page_user)) -> dict:
     conn = get_conn()
     current = _fetch_employee(conn, employee_id)
     if current is None:
