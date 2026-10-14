@@ -98,54 +98,23 @@
     <span class="sub" id="header-sub">管理ページ</span>
   </header>
 
+  <!-- LIFFガード: LINE外（通常ブラウザ）から開かれた場合はアプリを全面ブロック。
+       申請フォーム(index.html)と同じ方式。liff.init() が LINE 内かつ
+       ログイン済みを確認するまで表示され、アプリ本体(app-view)は隠したまま。 -->
+  <div id="liff-guard" style="position:fixed;inset:0;background:#f8fafc;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;">
+    <div style="max-width:420px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.05);">
+      <div style="font-size:48px;margin-bottom:12px;">🔒</div>
+      <h2 style="margin:0 0 8px;font-size:18px;color:#0f172a;">LINEアプリから開いてください</h2>
+      <p id="guard-message" style="margin:0;color:#64748b;font-size:14px;line-height:1.6;">
+        この管理ページはLINE内のLIFFアプリ（liff_admin）です。<br>
+        通常のブラウザからは開けません。<br><br>
+        <b>LINEアプリ内のリンクから開いてください。</b>
+      </p>
+    </div>
+  </div>
+
   <main>
-    <!-- セットアップ (初回のみ: 管理者アカウントが未作成の時) -->
-    <div id="setup-view" class="center-wrap" style="display:none;">
-      <div class="card login-card">
-        <h2>初期セットアップ</h2>
-        <div class="banner banner-info">
-          この管理ページを利用する管理者アカウントを作成します。<br>
-          社員マスタの追加・編集・削除ができるようになります。
-        </div>
-        <div class="row">
-          <label for="su-user">ユーザー名（ログイン用）</label>
-          <input type="text" id="su-user" autocomplete="username" placeholder="例: iwano" />
-        </div>
-        <div class="row">
-          <label for="su-pass">パスワード（8文字以上）</label>
-          <input type="password" id="su-pass" autocomplete="new-password" placeholder="8文字以上" />
-        </div>
-        <div class="row">
-          <label for="su-pass2">パスワード（確認）</label>
-          <input type="password" id="su-pass2" autocomplete="new-password" />
-        </div>
-        <div class="row">
-          <label for="su-name">表示名（任意）</label>
-          <input type="text" id="su-name" placeholder="例: 岩野" />
-        </div>
-        <div id="setup-error" class="banner banner-error" style="display:none;"></div>
-        <button class="btn-primary" id="setup-btn">管理者アカウントを作成</button>
-      </div>
-    </div>
-
-    <!-- ログイン -->
-    <div id="login-view" class="center-wrap" style="display:none;">
-      <div class="card login-card">
-        <h2>ログイン</h2>
-        <div class="row">
-          <label for="li-user">ユーザー名</label>
-          <input type="text" id="li-user" autocomplete="username" />
-        </div>
-        <div class="row">
-          <label for="li-pass">パスワード</label>
-          <input type="password" id="li-pass" autocomplete="current-password" />
-        </div>
-        <div id="login-error" class="banner banner-error" style="display:none;"></div>
-        <button class="btn-primary" id="login-btn">ログイン</button>
-      </div>
-    </div>
-
-    <!-- 管理画面 -->
+    <!-- 管理画面（LINE認証成功時のみ表示） -->
     <div id="app-view" style="display:none;">
       <div class="card">
         <h2>社員マスタ <span class="hint" id="emp-count"></span></h2>
@@ -266,28 +235,42 @@
     }
 
     // ===== 画面遷移 =====
-    function showView(name) {
-      ['setup-view', 'login-view', 'app-view'].forEach(function (v) {
-        $(v).style.display = (v === name) ? '' : 'none';
-      });
-      if (name === 'app-view') {
-        $('setup-view').style.display = 'none';
-        $('login-view').style.display = 'none';
+    // LINE専用: 管理画面(app-view)のみ。ガードは別管理。
+    function showApp() {
+      $('app-view').style.display = '';
+    }
+
+    function showGuard(message) {
+      var g = $('liff-guard');
+      if (g) g.style.display = 'flex';
+      if (message) {
+        var m = $('guard-message');
+        if (m) m.innerHTML = message;
       }
     }
 
-    // liff_admin (LIFFアプリ) から開かれた場合の LINE 認証。
-    // 通常ブラウザや init 失敗時は false を返しパスワード認証にフォールバック。
+    function hideGuard() {
+      var g = $('liff-guard');
+      if (g) g.style.display = 'none';
+    }
+
+    // liff_admin (LIFFアプリ) からの LINE 認証。LINE外・未ログイン・
+    // 認証失敗の場合はガードを出したまま false（パスワードフォールバックは無し）。
     async function tryLiffAuth() {
-      if (typeof liff === 'undefined') return false;
+      if (typeof liff === 'undefined') {
+        showGuard();
+        return false;
+      }
       try {
         await Promise.race([
           liff.init({ liffId: '2011376207-A9Fpo40J', scope: ['openid', 'profile'] }),
           new Promise(function (_, reject) { setTimeout(function () { reject(new Error('timeout')); }, 10000); })
         ]);
         if (typeof liff.isInClient !== 'function' || !liff.isInClient() || !liff.isLoggedIn()) {
-          return false;  // LINE外（ブラウザ直開き）→ パスワード認証へ
+          showGuard();  // LINE外（ブラウザ直開き）
+          return false;
         }
+        hideGuard();
         var lineUserId = liff.getContext().userId;
         // 生JWTは liff.getIDToken()（同期）。getDecodedIDToken() は
         // 復号payloadのみで .jwt は存在しない（SDK v2.31 実測）。
@@ -299,89 +282,34 @@
         });
         if (!r.ok) {
           var body = await r.text();
-          // パスワードフォールバックを見せつつ、失敗理由を表示
-          showView('login-view');
-          showBanner('login-error', 'LINE認証に失敗しました: ' + body.slice(0, 240));
+          showGuard('LINE認証に失敗しました。<br>' + esc(body.slice(0, 200)) +
+                    '<br><br>管理者（岩野）のLINEアカウントで開いてください。');
           return false;
         }
         var j = await r.json();
         lineToken = j.token;
         authKind = 'line';
-        enterApp({ username: '(LINE)', display_name: (j.employee && j.employee.name) || '管理者' });
+        enterApp({ username: '(LINE)', displayName: (j.employee && j.employee.name) || '管理者' });
         return true;
       } catch (e) {
-        // SDK未読込 / LINE外 / タイムアウト → パスワード認証へ
+        // SDK未読込 / タイムアウト
+        showGuard('LINE接続に失敗しました。<br>' + esc(e.message || String(e)));
         return false;
       }
     }
 
     function boot() {
-      // まず LINE 認証を試し、だめならパスワード認証（status/me 確認）。
-      tryLiffAuth().then(function (ok) {
-        if (ok) return;
-        api('/api/admin-auth/status').then(function (j) {
-          if (j.setup_required) {
-            showView('setup-view');
-          } else {
-            showView('login-view');
-          }
-        }).catch(function (e) {
-          // サーバー未起動など。ログイン画面を出してリトライ可能に。
-          showView('login-view');
-          showBanner('login-error', 'サーバーに接続できません: ' + e.message);
-        });
-        // 既にログイン済みならmeで確認
-        api('/api/admin-auth/me').then(function (j) {
-          if (j.success) { enterApp(j.admin); }
-        }).catch(function () { /* 未ログイン: boot の status 判定に任せる */ });
-      });
+      // LINE認証のみ。失敗時はガードが出たまま（アプリは開けない）。
+      tryLiffAuth();
     }
 
     function enterApp(admin) {
-      $('header-sub').textContent = (admin && admin.display_name)
-        ? admin.display_name + ' でログイン中' + (authKind === 'line' ? '（LINE認証）' : '')
+      $('header-sub').textContent = (admin && admin.displayName)
+        ? admin.displayName + '（LINE認証）'
         : 'ログイン中';
-      showView('app-view');
+      showApp();
       resetForm();
       loadEmployees();
-    }
-
-    // ===== セットアップ =====
-    $('setup-btn').addEventListener('click', function () {
-      var u = $('su-user').value.trim();
-      var p = $('su-pass').value;
-      var p2 = $('su-pass2').value;
-      var n = $('su-name').value.trim();
-      if (!u || !p) { showBanner('setup-error', 'ユーザー名とパスワードを入力してください。'); return; }
-      if (p.length < 8) { showBanner('setup-error', 'パスワードは8文字以上にしてください。'); return; }
-      if (p !== p2) { showBanner('setup-error', 'パスワードが確認用と一致しません。'); return; }
-      showBanner('setup-error', '');
-      api('/api/admin-auth/setup', {
-        method: 'POST',
-        body: JSON.stringify({ username: u, password: p, display_name: n })
-      }).then(function (j) {
-        if (j.success) { showToast('管理者アカウントを作成しました'); enterApp(j.admin); }
-      }).catch(function (e) {
-        showBanner('setup-error', e.message);
-      });
-    });
-
-    // ===== ログイン / ログアウト =====
-    $('login-btn').addEventListener('click', doLogin);
-    $('li-pass').addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
-
-    function doLogin() {
-      var u = $('li-user').value.trim();
-      var p = $('li-pass').value;
-      showBanner('login-error', '');
-      api('/api/admin-auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ username: u, password: p })
-      }).then(function (j) {
-        if (j.success) { showToast('ログインしました'); enterApp(j.admin); }
-      }).catch(function (e) {
-        showBanner('login-error', e.message);
-      });
     }
 
     // ===== 社員一覧 =====

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Correct the LIFF ID everywhere it is hardcoded.
 
-The LINE Developers console shows `2011376207-0e7oVVOT`, but the code had
+The LINE Developers console shows `2011376207-0e7oVWOT`, but the code had
 `...VWOT` — V and W are near-identical in most monospace fonts, and nothing
 caught it because the LIFF URL was only ever opened by hand. This matters now
 that the backend verifies the ID token: the `aud` claim carries the real LIFF
@@ -16,8 +16,8 @@ import re
 import sys
 from pathlib import Path
 
-OLD = "2011376207-0e7oVVOT"
-NEW = "2011376207-0e7oVVOT"
+OLD = "2011376207-0e7oVWOT"
+NEW = "2011376207-0e7oVWOT"
 
 ROOT = Path("C:/Users/user/HERMES_AGENT")
 SUFFIXES = {".html", ".js", ".md", ".yaml", ".yml", ".txt", ".py"}

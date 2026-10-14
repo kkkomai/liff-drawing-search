@@ -1068,7 +1068,7 @@ async def delete_household_expense(expense_id: str, request: Request) -> JSONRes
 # --------------------------------------------------------------------------- #
 
 try:
-    from app.api import admin, admin_auth, auth, orders  # type: ignore
+    from app.api import admin, auth, orders  # type: ignore
     from app.api import config_api as _config_api  # type: ignore
     from app.db import get_conn as _bento_get_conn, migrate as _bento_migrate  # type: ignore
 
@@ -1076,7 +1076,6 @@ try:
     app.include_router(auth.router)
     app.include_router(orders.router)
     app.include_router(admin.router)
-    app.include_router(admin_auth.router)
 
     # Run the migrations here, not just inside the bento FastAPI app's lifespan.
     # This app only *includes* the bento routers, so that lifespan never runs and

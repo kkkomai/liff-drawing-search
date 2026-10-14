@@ -12,9 +12,7 @@ from ..models import AdminDayOut, AdminRangeOut, AdminSummary
 from ..services.line_form import LineFormError, get_liff_app_link, push_liff_app_url
 from ..services.orders import admin_day, admin_range
 from ..timeutil import parse_date, today_tokyo, now_tokyo_iso
-from .admin_auth import _admin_token, current_admin_user
 from .deps import current_employee, require_admin
-from ..security import admin_auth
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -23,31 +21,23 @@ _LINE_USER_ID_MAX = 100
 
 
 def current_admin_page_user(request: Request) -> dict:
-    """管理ページの認証。2つの経路を許可する:
+    """管理ページの認証。**LINE認証のみ**（liff_admin から開く経路）。
 
-    1. admin_users のパスワードセッション（cookie または Bearer）
-       — ブラウザから /admin.html を直接開く経路
-    2. bento の LINE セッション（Bearer, role=admin）
-       — liff_admin (LIFFアプリ) から開く経路。
-         id_token 検証済みのLINE認証 + employees テーブルの管理者ロール。
+    liff_admin の liffId で liff.init し /api/auth/login で取得した
+    bento セッショントークンを Bearer で送る。id_token は ES256/JWKS で
+    検証済み。employees テーブルの role=admin のみ通す（管理者は岩野のみ）。
 
-    LIFFアプリ側は liff_admin の liffId で init し /api/auth/login で
-    bento セッショントークンを取得して Bearer で送る。
+    パスワード認証（admin_users）は撤去済み: ブラウザから開けない
+    LINE専用ページのため、オープンだった setup エンドポイントが
+    攻撃面になっていた。2026-10-14 に LINE 専用へ移行。
     """
-    token = _admin_token(request)
-    if token:
-        admin = admin_auth.resolve_admin_session(get_conn(), token)
-        if admin is not None:
-            return {"kind": "password", "name": admin.get("display_name") or admin.get("username") or "管理者"}
-    # ここに来た = cookie/Bearer は admin_users セッションではなかった。
-    # Bearer が bento の LINE セッションなら role=admin を確認して通す。
     header = request.headers.get("Authorization") or ""
-    if header.lower().startswith("bearer "):
-        employee = current_employee(request)  # 無効/期限切れは 401
-        if employee.get("role") != "admin":
-            raise forbidden("admin_required", "この操作は管理者のみ実行できます。")
-        return {"kind": "line", "name": employee.get("name") or "管理者"}
-    raise unauthorized("管理ページへのログインが必要です。")
+    if not header.lower().startswith("bearer "):
+        raise unauthorized("管理ページへのログインが必要です。（LINEアプリから開いてください）")
+    employee = current_employee(request)  # 無効/期限切れは 401
+    if employee.get("role") != "admin":
+        raise forbidden("admin_required", "この操作は管理者のみ実行できます。")
+    return {"kind": "line", "name": employee.get("name") or "管理者"}
 
 
 class LiffPushRequest(BaseModel):

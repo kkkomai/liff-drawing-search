@@ -1,0 +1,5 @@
+
+TRIGGER_MAP = {"類似検索": "search", "申請フォーム": "form", "入力フォーム": "form"}
+if msg_type == "text" and (text := (entry.get("message", {}) or {}).get("text", "")):
+    if text in TRIGGER_MAP:  # 簡潔トリガー
+        return _text_message("画像を送信してください")
