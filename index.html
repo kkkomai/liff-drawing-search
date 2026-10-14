@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261013diag</title>
+  <title>申請フォーム - v20261013tok</title>
   <script>window.__v="20261013household";</script>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/manifest-icon-192.png">
@@ -533,8 +533,13 @@
       var p = { lineUserId: null, idToken: null, error: null };
       try { p.lineUserId = liff.getContext().userId || null; } catch (e) { p.lineUserId = null; }
       try {
-        var decoded = liff.getDecodedIDToken();
-        p.idToken = decoded && decoded.jwt ? decoded.jwt : null;
+        // 生JWTは liff.getIDToken()（同期・storage読み）で取得する。
+        // 旧コードは getDecodedIDToken().jwt を見ていたが、このSDKの
+        // getDecodedIDToken() は復号payloadのみ返し .jwt フィールドは
+        // 存在しない（v2.31実測: keys=iss,sub,aud,exp,iat,name,picture）。
+        // また liff.idToken() はこのSDKに存在しないAPIで常にnullだった。
+        // 2026-10-14: この2つの誤りが「id_token がありません」の原因。
+        p.idToken = liff.getIDToken() || null;
       } catch (e) {
         p.idToken = null;
         p.error = (e && (e.message || e.code || e.name)) || String(e);
@@ -573,8 +578,11 @@
         payload.lineUserId = null;
       }
       try {
-        var decoded = liff.getDecodedIDToken();
-        payload.idToken = decoded && decoded.jwt ? decoded.jwt : null;
+        // 生JWTは liff.getIDToken()（同期）。getDecodedIDToken() は
+        // 復号payloadのみで .jwt は存在しない（SDK v2.31 実測）。
+        // 旧コードの decoded.jwt 参照が常に undefined で、
+        // idToken=なし → サーバー401 の原因だった。
+        payload.idToken = liff.getIDToken() || null;
       } catch (e) {
         // Swallowing this used to hide the real reason. getDecodedIDToken()
         // throws when the openid scope is missing or was never saved in the
@@ -584,12 +592,12 @@
         payload.idToken = null;
         window.__idTokenError = (e && (e.message || e.code || e.name)) || String(e);
         diag('4. IDトークン', '取得失敗: ' + window.__idTokenError);
-        log('sendBentoCredentials: getDecodedIDToken failed: ' + window.__idTokenError, true);
+        log('sendBentoCredentials: getIDToken failed: ' + window.__idTokenError, true);
       }
-      // A decoded token with an empty jwt means the same thing as a throw, and
+      // An empty token from getIDToken() means the same thing as a throw, and
       // it would otherwise be reported as merely "idToken=なし".
       if (!payload.idToken && !window.__idTokenError) {
-        window.__idTokenError = 'getDecodedIDToken() は成功しましたが jwt が空でした。';
+        window.__idTokenError = 'getIDToken() が空を返しました（openidスコープ未設定の可能性）。';
         diag('4. IDトークン', window.__idTokenError);
       }
       if (!payload.lineUserId) {
@@ -625,13 +633,11 @@
       } catch (e2) {
         diag('3b. 復号結果', '例外: ' + (e2 && e2.message ? e2.message : e2));
       }
-      // liff.idToken() is the documented accessor for the raw, signed token.
-      // getDecodedIDToken() returned raw claims with no `jwt`, which is the
-      // shape LIFF produces when openid was not granted — so ask the token
-      // endpoint directly and report aud/iss, which tell us whether the token
-      // was issued for THIS channel and issuer.
+      // liff.getIDToken() is the documented accessor for the raw, signed
+      // token (synchronous read from storage). liff.idToken() does not
+      // exist in this SDK version — calling it always returned null.
       try {
-        var _raw = (typeof liff.idToken === 'function') ? liff.idToken() : null;
+        var _raw = (typeof liff.getIDToken === 'function') ? liff.getIDToken() : null;
         diag('3c. 生トークン', _raw ? String(_raw).length + '文字 / ' + String(_raw).slice(0, 24) + '...' : 'なし');
         if (_raw) {
           var _p = JSON.parse(atob(String(_raw).split('.')[1] || ''));
@@ -2499,13 +2505,17 @@ liff.init({
       try {
         var lineUserId = null;
         try { lineUserId = (typeof liff !== 'undefined' && liff.getContext) ? (liff.getContext().userId || null) : null; } catch (e) { lineUserId = null; }
-        // liff.idToken() can legitimately be null right after liff.init()
+        // liff.getIDToken() can legitimately be null right after liff.init()
         // resolves if the LIFF SDK is still resolving the openid context.
         // Keep polling until the token arrives or we hit a generous budget
         // — the previous 5-iteration cap (~4s) was too short on Render
         // cold-starts where liff.init() returned instantly but the SDK
         // handshake had not actually settled yet.
-        var idToken = (typeof liff !== 'undefined' && liff.idToken) ? liff.idToken() : null;
+        // NOTE: liff.idToken() does NOT exist in the LIFF SDK — the raw
+        // JWT accessor is liff.getIDToken() (synchronous). The old call
+        // returned null forever, which is what forced the
+        // BENTO_ALLOW_LOGIN_WITHOUT_ID_TOKEN escape hatch to be used.
+        var idToken = (typeof liff !== 'undefined' && liff.getIDToken) ? liff.getIDToken() : null;
         if (!lineUserId) {
           // No userId at all means liff.init() has not resolved. Wait
           // longer than for the idToken-only case.
@@ -2530,7 +2540,7 @@ liff.init({
             log('authenticateWithBento: idToken stays null after 20s; attempting login without id_token (will fail unless allow_login_without_id_token=true)', true);
             // 診断パネルにも残す。openid スコープが未設定/未保存の場合、
             // getDecodedIDToken() のエラーと合わせて原因が特定できる。
-            diag('4. IDトークン', 'liff.idToken() が20秒たってもnull（openidスコープ未設定の可能性）');
+            diag('4. IDトークン', 'liff.getIDToken() が20秒たっても空（openidスコープ未設定の可能性）');
           }
           // Either way (token arrived or we gave up waiting), fall through
           // and POST. The empty string for id_token is a valid value when
