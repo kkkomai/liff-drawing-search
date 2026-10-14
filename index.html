@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261013tok</title>
+  <title>申請フォーム - v20261013dual</title>
   <script>window.__v="20261013household";</script>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/manifest-icon-192.png">
@@ -2425,13 +2425,24 @@ var __el = document.getElementById('adjust-aspect');
       });
       try {
         log('initLiff: calling liff.init...');
+        // 2つのLIFFアプリを同一ページで扱う:
+        //   申請フォーム : liffId 2011376207-0e7oVWOT (エンドポイントURL = /)
+        //   liff_admin  : liffId 2011376207-A9Fpo40J (エンドポイントURL = /?app=admin)
+        // エンドポイントURL自身のクエリは1次リダイレクト時点で location.search
+        // に入っている（LIFF URLの追加情報は liff.state に退避され init 後に
+        // 復元されるが、エンドポイントURL自身のクエリは最初から読める）。
+        // ハードコードの単一liffIdだと、2つ目のLIFFアプリから開いた時に
+        // 存在しない/不一致のliffIdで初期化して認証が失敗する。
+        var _qs = new URLSearchParams(window.location.search);
+        var _liffId = _qs.get('app') === 'admin' ? '2011376207-A9Fpo40J' : '2011376207-0e7oVWOT';
+        diag('0. LIFFアプリ', _qs.get('app') === 'admin' ? 'liff_admin' : '申請フォーム');
         var result = await Promise.race([
           // Pass the scope explicitly. The SDK only puts openid in the client context
 // when it is requested here or set in the LIFF console; relying on the console
 // alone left getDecodedIDToken() returning an empty jwt, which the backend then
 // rejected as "id_token がありません" with no indication of the real cause.
 liff.init({
-            liffId: '2011376207-0e7oVWOT',
+            liffId: _liffId,
             scope: ['openid', 'profile']
           }),
           timeoutPromise
