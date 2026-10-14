@@ -1,7 +1,6 @@
 bike_logs.json
 data/
 image_server.py
-paid_db.py
 trigger_patch.txt
 verify_bento_tab.py
 verify_deployed_runtime.py
