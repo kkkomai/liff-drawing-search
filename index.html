@@ -107,7 +107,7 @@
       -webkit-overflow-scrolling: touch;
     }
     .weather-day-card {
-      flex: 0 0 110px;
+      flex: 0 0 126px;
       background: #fff;
       border: 1px solid #e2e8f0;
       border-radius: 10px;
@@ -124,20 +124,22 @@
       box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
       transform: translateY(-2px);
     }
-    .weather-day-card .date { font-size: 11px; color: #64748b; }
-    .weather-day-card .weekday { font-size: 13px; font-weight: 700; }
-    .weather-day-card .icon { font-size: 32px; line-height: 1.2; }
-    .weather-day-card .temps { font-size: 14px; font-weight: 600; }
+    /* phone での視認性を優先して全要素を拡大（旧: date11/weekday13/
+       temps14/rain11/wind11/verdict10 — iPhone では小さすぎた）*/
+    .weather-day-card .date { font-size: 13px; color: #475569; }
+    .weather-day-card .weekday { font-size: 15px; font-weight: 700; }
+    .weather-day-card .icon { font-size: 36px; line-height: 1.2; }
+    .weather-day-card .temps { font-size: 17px; font-weight: 700; }
     .weather-day-card .max { color: #dc2626; }
     .weather-day-card .min { color: #2563eb; }
-    .weather-day-card .rain { font-size: 11px; color: #64748b; }
-    .weather-day-card .wind { font-size: 11px; }
+    .weather-day-card .rain { font-size: 13px; color: #475569; }
+    .weather-day-card .wind { font-size: 13px; }
     .weather-day-card .verdict {
       display: inline-block;
       margin-top: 4px;
-      padding: 2px 6px;
+      padding: 2px 8px;
       border-radius: 999px;
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 700;
       color: #fff;
     }
@@ -146,20 +148,20 @@
     .verdict-bad { background: #dc2626; }
     .current-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .current-cell { background: #f1f5f9; border-radius: 8px; padding: 10px; }
-    .current-cell .label { font-size: 11px; color: #64748b; }
+    .current-cell .label { font-size: 13px; color: #475569; }
     .current-cell .value { font-size: 22px; font-weight: 700; }
-    .current-cell .unit { font-size: 11px; color: #64748b; margin-left: 2px; }
+    .current-cell .unit { font-size: 12px; color: #475569; margin-left: 2px; }
     .current-icon { font-size: 56px; line-height: 1; }
-    .current-summary { text-align: center; }
+    .current-summary { text-align: center; font-size: 17px; font-weight: 600; }
     .detail-row {
       display: flex;
       justify-content: space-between;
-      padding: 4px 0;
+      padding: 6px 0;
       border-bottom: 1px solid #e2e8f0;
-      font-size: 13px;
+      font-size: 15px;
     }
     .detail-row:last-child { border-bottom: none; }
-    .detail-row .label { color: #64748b; }
+    .detail-row .label { color: #475569; }
     .detail-row .value { font-weight: 600; }
 
     /* Image fullscreen overlay */
@@ -921,13 +923,13 @@
             '<div class="current-cell" style="margin-bottom:8px;">' +
               '<div class="label">気温 / 風速</div>' +
               '<div class="value">' + (d0.temp != null ? d0.temp.toFixed(1) : '--') + '<span class="unit">℃</span></div>' +
-              '<div class="value" style="font-size:14px;">' + (d0.wind != null ? d0.wind.toFixed(1) : '--') + '<span class="unit">m/s</span>' +
+              '<div class="value" style="font-size:17px;">' + (d0.wind != null ? d0.wind.toFixed(1) : '--') + '<span class="unit">m/s</span>' +
               (d0.windDir != null ? ' (' + degToCompass(d0.windDir) + ')' : '') + '</div>' +
             '</div>' +
             '<div class="current-cell">' +
               '<div class="label">降水 / 位置</div>' +
-              '<div class="value" style="font-size:14px;">' + (d0.rain != null ? d0.rain : '--') + '<span class="unit">%</span></div>' +
-              '<div class="value" style="font-size:13px;color:var(--fg);font-weight:600;">' + escHtml(placeName || (lat.toFixed(3) + ', ' + lng.toFixed(3))) + '</div>' +
+              '<div class="value" style="font-size:17px;">' + (d0.rain != null ? d0.rain : '--') + '<span class="unit">%</span></div>' +
+              '<div class="value" style="font-size:15px;color:var(--fg);font-weight:600;">' + escHtml(placeName || (lat.toFixed(3) + ', ' + lng.toFixed(3))) + '</div>' +
             '</div>' +
           '</div>' +
         '</div>';
