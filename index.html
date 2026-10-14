@@ -737,7 +737,7 @@
       if (!root) return;
       root.innerHTML =
         '<div class="card">' +
-          '<h2 id="weather-status-h">現在地の天気</h2>' +
+          '<h2 id="weather-status-h">今日の予報</h2>' +
           '<div id="weather-current"></div>' +
         '</div>' +
         '<div class="card">' +
@@ -759,7 +759,7 @@
       currentEl.innerHTML =
         '<div style="text-align:center;padding:16px 8px;">' +
           '<div style="margin-bottom:12px;color:var(--muted);">位置情報の利用にはボタンでの操作が必要です</div>' +
-          '<button type="button" class="weather-cta" id="weather-locate-btn">📍 現在地の天気を取得</button>' +
+          '<button type="button" class="weather-cta" id="weather-locate-btn">📍 現在地の予報を取得</button>' +
           ' <button type="button" class="weather-cta secondary" id="weather-default-btn">草津駅の天気を表示</button>' +
         '</div>';
 
@@ -770,7 +770,7 @@
       }
       if (defaultBtn) {
         defaultBtn.addEventListener('click', function () {
-          document.getElementById('weather-status-h').textContent = '現在地の天気（草津駅の固定値）';
+          document.getElementById('weather-status-h').textContent = '今日の予報（草津駅の固定値）';
           fetchWeather(WEATHER_DEFAULT.latitude, WEATHER_DEFAULT.longitude);
         });
       }
@@ -781,7 +781,7 @@
         showWeatherError('このブラウザは位置情報に対応していません');
         return;
       }
-      document.getElementById('weather-status-h').textContent = '現在地の天気（位置情報を取得中...）';
+      document.getElementById('weather-status-h').textContent = '今日の予報（位置情報を取得中...）';
       var fired = false;
       var fallback = setTimeout(function () {
         if (fired) return;
@@ -818,7 +818,7 @@
       var fb = document.getElementById('weather-fallback-btn');
       if (fb) {
         fb.addEventListener('click', function () {
-          document.getElementById('weather-status-h').textContent = '現在地の天気（草津駅の固定値）';
+          document.getElementById('weather-status-h').textContent = '今日の予報（草津駅の固定値）';
           fetchWeather(WEATHER_DEFAULT.latitude, WEATHER_DEFAULT.longitude);
         });
       }
@@ -904,11 +904,20 @@
       // raw lat/lng pair so the user always knows where the
       // forecast is for.
       var placeName = j.place_name || null;
+      // 一番上の表示は「今日の予報」（日別データの先頭=今日）。
+      // 以前は現在の実況（current）を表示していたが、予報タブとしての
+      // 一貫性と「何日の情報か」の明確さから日別予報に統一した。
+      var _wd = ['日', '月', '火', '水', '木', '金', '土'];
+      var _now = new Date();
+      var todayStr = (_now.getMonth() + 1) + '/' + _now.getDate() + ' (' + _wd[_now.getDay()] + ')';
       var d0 = {
-        code: (c.weather_code !== undefined) ? c.weather_code : (d.weather_code ? d.weather_code[0] : 0),
-        temp: c.temperature_2m,
-        wind: c.wind_speed_10m,
-        windDir: c.wind_direction_10m,
+        code: (d.weather_code && d.weather_code[0] !== undefined)
+              ? d.weather_code[0]
+              : (c.weather_code !== undefined ? c.weather_code : 0),
+        tempMax: (d.temperature_2m_max || [])[0],
+        tempMin: (d.temperature_2m_min || [])[0],
+        wind: (d.wind_speed_10m_max || [])[0],
+        windDir: (d.wind_direction_10m_dominant || [])[0],
         rain: (d.precipitation_probability_max && d.precipitation_probability_max[0] !== undefined)
               ? d.precipitation_probability_max[0] : null,
       };
@@ -918,28 +927,28 @@
           '<div class="current-cell current-summary">' +
             '<div class="current-icon">' + w.icon + '</div>' +
             '<div>' + escHtml(w.label) + '</div>' +
+            '<div style="font-size:13px;color:#475569;margin-top:2px;font-weight:600;">今日 ' + todayStr + '</div>' +
           '</div>' +
           '<div>' +
             '<div class="current-cell" style="margin-bottom:8px;">' +
-              '<div class="label">気温 / 風速</div>' +
-              '<div class="value">' + (d0.temp != null ? d0.temp.toFixed(1) : '--') + '<span class="unit">℃</span></div>' +
-              '<div class="value" style="font-size:17px;">' + (d0.wind != null ? d0.wind.toFixed(1) : '--') + '<span class="unit">m/s</span>' +
-              (d0.windDir != null ? ' (' + degToCompass(d0.windDir) + ')' : '') + '</div>' +
+              '<div class="label">今日の気温（最高 / 最低）</div>' +
+              '<div class="value">' + (d0.tempMax != null ? d0.tempMax.toFixed(1) : '--') + '<span class="unit">℃</span></div>' +
+              '<div class="value" style="font-size:17px;">' + (d0.tempMin != null ? d0.tempMin.toFixed(1) : '--') + '<span class="unit">℃</span></div>' +
             '</div>' +
             '<div class="current-cell">' +
-              '<div class="label">降水 / 位置</div>' +
+              '<div class="label">降水確率 / 最大風速</div>' +
               '<div class="value" style="font-size:17px;">' + (d0.rain != null ? d0.rain : '--') + '<span class="unit">%</span></div>' +
-              '<div class="value" style="font-size:15px;color:var(--fg);font-weight:600;">' + escHtml(placeName || (lat.toFixed(3) + ', ' + lng.toFixed(3))) + '</div>' +
+              '<div class="value" style="font-size:15px;color:var(--fg);font-weight:600;">' + (d0.wind != null ? d0.wind.toFixed(1) : '--') + '<span class="unit">m/s</span>' + (d0.windDir != null ? ' (' + degToCompass(d0.windDir) + ')' : '') + '</div>' +
             '</div>' +
           '</div>' +
         '</div>';
       document.getElementById('weather-current').innerHTML = currentHtml;
       // Reflect the resolved place name in the section title too, so
-      // the heading "現在地の天気" becomes "現在地の天気 — 京都市".
+      // the heading becomes "今日の予報 — 京都市".
       var statusEl = document.getElementById('weather-status-h');
       if (statusEl) {
         var label = placeName || (lat.toFixed(3) + ', ' + lng.toFixed(3));
-        statusEl.textContent = '現在地の天気 — ' + label;
+        statusEl.textContent = '今日の予報 — ' + label;
       }
 
       // Daily scroller.
