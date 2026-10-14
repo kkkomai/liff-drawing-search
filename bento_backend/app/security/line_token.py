@@ -127,6 +127,18 @@ def verify_id_token(
         )
     except jwt.ExpiredSignatureError as exc:
         raise TokenError("id_token_expired", "ID tokenの有効期限が切れています。") from exc
+    except jwt.InvalidIssuerError as exc:
+        raise TokenError(
+            "invalid_issuer",
+            "ID tokenの発行者(iss)が一致しません。"
+            "BENTO_LIFF_ISSUER の設定を確認してください（正: https://access.line.me）。",
+        ) from exc
+    except jwt.InvalidAudienceError as exc:
+        raise TokenError(
+            "invalid_audience",
+            "ID tokenの対象チャネル(aud)が一致しません。"
+            "Render の BENTO_LINE_CHANNEL_ID が LIFF アプリのチャネルIDと一致しているか確認してください。",
+        ) from exc
     except jwt.InvalidTokenError as exc:
         raise TokenError("invalid_id_token", "ID tokenを検証できませんでした。") from exc
 

@@ -72,7 +72,7 @@ def settings_env(monkeypatch):
 def make_token(rsa_key, **overrides):
     now = int(time.time())
     claims = {
-        "iss": "https://api.line.me",
+        "iss": "https://access.line.me",
         "aud": "1234567890",
         "sub": "Utest0002aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "iat": now,
@@ -100,7 +100,7 @@ def test_expired_token_rejected(settings_env, rsa_key, jwks_stub):
 def test_wrong_audience_rejected(settings_env, rsa_key, jwks_stub):
     with pytest.raises(TokenError) as exc:
         verify_id_token(settings_env, make_token(rsa_key, aud="9999999999"))
-    assert exc.value.reason == "invalid_id_token"
+    assert exc.value.reason == "invalid_audience"
 
 
 def test_wrong_issuer_rejected(settings_env, rsa_key, jwks_stub):
@@ -117,7 +117,7 @@ def test_token_signed_by_other_key_rejected(settings_env, rsa_key, jwks_stub):
 
 def test_unknown_kid_rejected(settings_env, rsa_key, jwks_stub):
     token = jwt.encode(
-        {"iss": "https://api.line.me", "aud": "1234567890", "sub": "x",
+        {"iss": "https://access.line.me", "aud": "1234567890", "sub": "x",
          "iat": int(time.time()), "exp": int(time.time()) + 60},
         rsa_key, algorithm="RS256", headers={"kid": "unknown", "alg": "RS256"},
     )
@@ -149,7 +149,7 @@ def test_garbage_token_rejected(settings_env, jwks_stub):
 
 def test_none_algorithm_rejected(settings_env, rsa_key, jwks_stub):
     token = jwt.encode(
-        {"iss": "https://api.line.me", "aud": "1234567890", "sub": "x",
+        {"iss": "https://access.line.me", "aud": "1234567890", "sub": "x",
          "iat": int(time.time()), "exp": int(time.time()) + 60},
         key="", algorithm="none", headers={"kid": KID},
     )

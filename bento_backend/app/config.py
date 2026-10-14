@@ -52,7 +52,13 @@ class Settings(BaseSettings):
     # --- LINE LIFF / ID token verification --------------------------------
     line_channel_id: str | None = Field(default=None)
     line_channel_secret: str | None = Field(default=None)
-    liff_issuer: str = Field(default="https://api.line.me")
+    # LINE Login / LIFF の ID トークンの iss は https://access.line.me
+    # （LINE 公式ドキュメント準拠）。旧既定値 https://api.line.me は
+    # 誤りで、PyJWT の issuer 検証が必ず失敗していた。escape hatch
+    # （allow_login_without_id_token）で検証が一度も実行されなかったため
+    # 長らく露見しなかった。2026-10-14 修正。
+    # BENTO_LIFF_ISSUER で上書き可能（通常は不要）。
+    liff_issuer: str = Field(default="https://access.line.me")
     liff_jwks_url: str = Field(default="https://api.line.me/oauth2/v3/keys")
     jwks_cache_seconds: int = Field(default=3600)
 
