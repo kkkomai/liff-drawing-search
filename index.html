@@ -729,6 +729,10 @@
     var WEATHER_DEFAULT = { latitude: 35.0116, longitude: 135.7681 };
     var weatherTabLoaded = false;
     var weatherData = null;
+    // 最後に取得した座標（上部表示のフォールバック表記と
+    // renderWeatherTop から参照するために保持）
+    var weatherLat = null;
+    var weatherLng = null;
 
     function loadWeatherTab() {
       // Render the tab skeleton. The "now loading" state gives the user
@@ -896,60 +900,13 @@
     }
 
     function renderWeather(j, lat, lng) {
+      weatherLat = lat;
+      weatherLng = lng;
       var f = j.forecast || {};
-      var c = f.current || {};
       var d = f.daily || {};
-      // The server attaches a reverse-geocoded place name when the
-      // Nominatim lookup succeeds. Prefer it; fall back to the
-      // raw lat/lng pair so the user always knows where the
-      // forecast is for.
-      var placeName = j.place_name || null;
-      // 一番上の表示は「今日の予報」（日別データの先頭=今日）。
-      // 以前は現在の実況（current）を表示していたが、予報タブとしての
-      // 一貫性と「何日の情報か」の明確さから日別予報に統一した。
-      var _wd = ['日', '月', '火', '水', '木', '金', '土'];
-      var _now = new Date();
-      var todayStr = (_now.getMonth() + 1) + '/' + _now.getDate() + ' (' + _wd[_now.getDay()] + ')';
-      var d0 = {
-        code: (d.weather_code && d.weather_code[0] !== undefined)
-              ? d.weather_code[0]
-              : (c.weather_code !== undefined ? c.weather_code : 0),
-        tempMax: (d.temperature_2m_max || [])[0],
-        tempMin: (d.temperature_2m_min || [])[0],
-        wind: (d.wind_speed_10m_max || [])[0],
-        windDir: (d.wind_direction_10m_dominant || [])[0],
-        rain: (d.precipitation_probability_max && d.precipitation_probability_max[0] !== undefined)
-              ? d.precipitation_probability_max[0] : null,
-      };
-      var w = wmoLookup(d0.code);
-      var currentHtml =
-        '<div class="current-grid">' +
-          '<div class="current-cell current-summary">' +
-            '<div class="current-icon">' + w.icon + '</div>' +
-            '<div>' + escHtml(w.label) + '</div>' +
-            '<div style="font-size:13px;color:#475569;margin-top:2px;font-weight:600;">今日 ' + todayStr + '</div>' +
-          '</div>' +
-          '<div>' +
-            '<div class="current-cell" style="margin-bottom:8px;">' +
-              '<div class="label">今日の気温（最高 / 最低）</div>' +
-              '<div class="value">' + (d0.tempMax != null ? d0.tempMax.toFixed(1) : '--') + '<span class="unit">℃</span></div>' +
-              '<div class="value" style="font-size:17px;">' + (d0.tempMin != null ? d0.tempMin.toFixed(1) : '--') + '<span class="unit">℃</span></div>' +
-            '</div>' +
-            '<div class="current-cell">' +
-              '<div class="label">降水確率 / 最大風速</div>' +
-              '<div class="value" style="font-size:17px;">' + (d0.rain != null ? d0.rain : '--') + '<span class="unit">%</span></div>' +
-              '<div class="value" style="font-size:15px;color:var(--fg);font-weight:600;">' + (d0.wind != null ? d0.wind.toFixed(1) : '--') + '<span class="unit">m/s</span>' + (d0.windDir != null ? ' (' + degToCompass(d0.windDir) + ')' : '') + '</div>' +
-            '</div>' +
-          '</div>' +
-        '</div>';
-      document.getElementById('weather-current').innerHTML = currentHtml;
-      // Reflect the resolved place name in the section title too, so
-      // the heading becomes "今日の予報 — 京都市".
-      var statusEl = document.getElementById('weather-status-h');
-      if (statusEl) {
-        var label = placeName || (lat.toFixed(3) + ', ' + lng.toFixed(3));
-        statusEl.textContent = '今日の予報 — ' + label;
-      }
+
+      // 一番上の表示は「選択中のカードと同じ予報」を表示する
+      // （既定は先頭=今日）。実装は下の renderWeatherTop(idx)。
 
       // Daily scroller.
       var times = d.time || [];
@@ -991,7 +948,66 @@
       if (times.length) renderWeatherDetail(0);
     }
 
+    // 一番上の「大きな予報」を idx 番目のカードと同じ内容で描画する。
+    // カードをタップすると renderWeatherDetail(idx) から呼ばれ、
+    // 上部も選択日の予報に切り替わる（既定は先頭=今日）。
+    function renderWeatherTop(idx) {
+      var j = weatherData || {};
+      var f = j.forecast || {};
+      var c = f.current || {};
+      var d = f.daily || {};
+      var placeName = j.place_name || null;
+      var _wd = ['日', '月', '火', '水', '木', '金', '土'];
+      var dateStr = (d.time || [])[idx];
+      var dt = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var isToday = dt.getTime() === today.getTime();
+      var d0 = {
+        code: (d.weather_code && d.weather_code[idx] !== undefined)
+              ? d.weather_code[idx]
+              : (c.weather_code !== undefined ? c.weather_code : 0),
+        tempMax: (d.temperature_2m_max || [])[idx],
+        tempMin: (d.temperature_2m_min || [])[idx],
+        wind: (d.wind_speed_10m_max || [])[idx],
+        windDir: (d.wind_direction_10m_dominant || [])[idx],
+        rain: (d.precipitation_probability_max && d.precipitation_probability_max[idx] !== undefined)
+              ? d.precipitation_probability_max[idx] : null,
+      };
+      var w = wmoLookup(d0.code);
+      var md = (dt.getMonth() + 1) + '/' + dt.getDate();
+      var dateLabel = (isToday ? '今日 ' : '') + md + ' (' + _wd[dt.getDay()] + ')';
+      var currentHtml =
+        '<div class="current-grid">' +
+          '<div class="current-cell current-summary">' +
+            '<div class="current-icon">' + w.icon + '</div>' +
+            '<div>' + escHtml(w.label) + '</div>' +
+            '<div style="font-size:13px;color:#475569;margin-top:2px;font-weight:600;">' + dateLabel + '</div>' +
+          '</div>' +
+          '<div>' +
+            '<div class="current-cell" style="margin-bottom:8px;">' +
+              '<div class="label">' + (isToday ? '今日' : md) + 'の気温（最高 / 最低）</div>' +
+              '<div class="value">' + (d0.tempMax != null ? d0.tempMax.toFixed(1) : '--') + '<span class="unit">℃</span></div>' +
+              '<div class="value" style="font-size:17px;">' + (d0.tempMin != null ? d0.tempMin.toFixed(1) : '--') + '<span class="unit">℃</span></div>' +
+            '</div>' +
+            '<div class="current-cell">' +
+              '<div class="label">降水確率 / 最大風速</div>' +
+              '<div class="value" style="font-size:17px;">' + (d0.rain != null ? d0.rain : '--') + '<span class="unit">%</span></div>' +
+              '<div class="value" style="font-size:15px;color:var(--fg);font-weight:600;">' + (d0.wind != null ? d0.wind.toFixed(1) : '--') + '<span class="unit">m/s</span>' + (d0.windDir != null ? ' (' + degToCompass(d0.windDir) + ')' : '') + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      var curEl = document.getElementById('weather-current');
+      if (curEl) curEl.innerHTML = currentHtml;
+      var statusEl = document.getElementById('weather-status-h');
+      if (statusEl) {
+        var locLabel = placeName || (weatherLat != null ? weatherLat.toFixed(3) + ', ' + weatherLng.toFixed(3) : '現在地');
+        statusEl.textContent = (isToday ? '今日の予報' : md + '(' + _wd[dt.getDay()] + ') の予報') + ' — ' + locLabel;
+      }
+    }
+
     function renderWeatherDetail(i) {
+      // 選択カードに連動して一番上の表示もその日の予報に切り替える
+      renderWeatherTop(i);
       var f = (weatherData && weatherData.forecast) || {};
       var d = f.daily || {};
       var h = f.hourly || {};
