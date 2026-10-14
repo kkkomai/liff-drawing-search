@@ -86,16 +86,21 @@ def setup(body: SetupRequest, response: Response) -> dict:
     if not body.username.replace("_", "").replace("-", "").isalnum():
         raise bad_request("invalid_username", "ユーザー名は英数字・_・- のみ使用できます。")
     try:
-        user = admin_auth.create_admin_user(
-            conn, body.username, body.password, body.display_name or body.username
-        )
+        # INSERT + 戻り値の SELECT をまとめて1トランザクションに。
+        # （create_admin_user は内部で find_admin_user も呼ぶ）
         with conn:
-            pass  # commit the insert
+            user = admin_auth.create_admin_user(
+                conn, body.username, body.password, body.display_name or body.username
+            )
     except Exception as exc:  # noqa: BLE001 - unique username collision etc.
         raise bad_request("setup_failed", f"管理者の作成に失敗しました: {exc}") from exc
-    session = admin_auth.create_admin_session(conn, user["id"])
+    # with ブロックを出たコネクションは closed になり得る（Neon プーラの
+    # 性質。既存コードは get_conn() の closed チェックで自動再接続する）。
+    # セッション作成の前に取り直す。ここで取り直さないと
+    # "the connection is closed" で setup が500になる。
+    conn = get_conn()
     with conn:
-        pass
+        session = admin_auth.create_admin_session(conn, user["id"])
     _set_session_cookie(response, session["token"])
     return {"success": True, "admin": user, "token": session["token"], "expires_at": session["expires_at"]}
 
@@ -108,9 +113,8 @@ def login(body: LoginRequest, response: Response) -> dict:
     # cannot be used to enumerate valid usernames.
     if user is None or not admin_auth.verify_password(body.password, user["password_hash"]):
         raise unauthorized("ユーザー名またはパスワードが違います。")
-    session = admin_auth.create_admin_session(conn, user["id"])
     with conn:
-        pass
+        session = admin_auth.create_admin_session(conn, user["id"])
     _set_session_cookie(response, session["token"])
     user.pop("password_hash", None)
     return {"success": True, "admin": user, "token": session["token"], "expires_at": session["expires_at"]}
@@ -121,9 +125,8 @@ def logout(request: Request, response: Response) -> dict:
     token = _admin_token(request)
     if token:
         conn = get_conn()
-        admin_auth.revoke_admin_session(conn, token)
         with conn:
-            pass
+            admin_auth.revoke_admin_session(conn, token)
     response.delete_cookie(key=COOKIE_NAME, path="/")
     return {"success": True}
 
