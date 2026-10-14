@@ -1,22 +1,8 @@
-nul
-*.pem
-*+*.pem
-*.bak
-__pycache__/
-start_ssl.py
-uploads/
-*.jpg
-node_modules/
-package-lock.json
-package.json
-# bento_backend/ IS committed: Render can only build what is pushed, and
-# asgi_app.py imports the ordering API from there. Mirror it with
-# `python sync_bento_backend.py` after editing projects/bento-liff/backend.
-bento_backend/.env
-bento_backend/.env.local
-bento_backend/**/__pycache__/
-bento_backend/**/*.pyc
-bento_backend/data/
-bento_backend/.venv/
-# Contains a placeholder for the LINE Channel secret — keep it local.
-RENDER_ENV.txt
+bike_logs.json
+data/
+image_server.py
+paid_db.py
+trigger_patch.txt
+verify_bento_tab.py
+verify_deployed_runtime.py
+fix_liff_id.py
