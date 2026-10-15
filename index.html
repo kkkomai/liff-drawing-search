@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261013dual</title>
-  <script>window.__v="20261013household";</script>
+  <title>申請フォーム - v20261015wtop</title>
+  <script>window.__v="20261015wtop";</script>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/manifest-icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -171,7 +171,7 @@
   </style>
 </head>
 <body>
-  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261009guarded)</span></h1>
+  <h1 style="padding: 16px; background: #fff;">申請フォーム <span style="font-size:11px;color:#999;">(v20261015wtop)</span></h1>
 
   <!-- LIFF guard: when this page is opened outside the LINE LIFF WebView
        (e.g. by typing the URL into a normal browser), the application is
@@ -740,13 +740,15 @@
       var root = document.getElementById('weather-root');
       if (!root) return;
       root.innerHTML =
-        '<div class="card">' +
-          '<h2 id="weather-status-h">今日の予報</h2>' +
-          '<div id="weather-current"></div>' +
-        '</div>' +
+        // カード順序はユーザー指示 (2026-10-15) で「今後16日」を一番上に。
+        // 旧順序: 今日の予報 → 今後16日 → 時間帯別詳細。
         '<div class="card">' +
           '<h2>今後16日</h2>' +
           '<div class="weather-scroller" id="weather-daily"></div>' +
+        '</div>' +
+        '<div class="card">' +
+          '<h2 id="weather-status-h">今日の予報</h2>' +
+          '<div id="weather-current"></div>' +
         '</div>' +
         '<div class="card" id="weather-detail-card" style="display:none;">' +
           '<h2 id="weather-detail-title">-- の時間帯別</h2>' +
