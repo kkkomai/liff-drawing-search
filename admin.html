@@ -185,7 +185,17 @@
     </div>
     <div id="tab-news" style="display:none;">
       <div class="card" id="news-card">
-        <h2 style="font-size:20px;">📰 本日の主要ニュース <button class="btn-ghost" onclick="loadNews()">更新</button></h2>
+        <h2 style="font-size:20px;">📰 本日の主要ニュース
+          <button class="btn-ghost" onclick="loadNews(currentNewsCategory)">更新</button>
+        </h2>
+        <div class="tabbar" style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 14px;">
+          <button class="btn-ghost news-cat" onclick="loadNews('主要')">主要</button>
+          <button class="btn-ghost news-cat" onclick="loadNews('政治')">政治</button>
+          <button class="btn-ghost news-cat" onclick="loadNews('経済')">経済</button>
+          <button class="btn-ghost news-cat" onclick="loadNews('科学')">科学</button>
+          <button class="btn-ghost news-cat" onclick="loadNews('エンタメ')">エンタメ</button>
+          <button class="btn-ghost news-cat" onclick="loadNews('スポーツ')">スポーツ</button>
+        </div>
         <div id="news-list" style="font-size:16px;line-height:1.7;">読み込み中…</div>
       </div>
     </div>
@@ -462,10 +472,14 @@
       if (name === 'news') loadNews();
     }
 
-    function loadNews() {
+    var currentNewsCategory = '主要';
+
+    function loadNews(category) {
+      category = category || currentNewsCategory;
+      currentNewsCategory = category;
+      $('news-list').innerHTML = '<div class="empty" style="font-size:16px;">読み込み中…</div>';
       var el = $('news-list');
-      if (el) el.innerHTML = '<div class="empty">読み込み中…</div>';
-      fetch('/api/news', { cache: 'no-store' })
+      fetch('/api/news?category=' + encodeURIComponent(category), { cache: 'no-store' })
         .then(function (r) { return r.json(); })
         .then(function (j) {
           var items = (j && j.items) || [];

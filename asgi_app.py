@@ -1347,19 +1347,35 @@ async def form() -> FileResponse:
     return FileResponse(BASE_DIR / "form.html", headers=_NO_CACHE)
 
 
-_NEWS_CACHE: dict[str, Any] = {"ts": 0.0, "items": []}
+_NEWS_CACHE: dict[str, Any] = {}
 _NEWS_CACHE_LOCK = _threading.Lock()
 _NEWS_TTL_SECONDS = 1800
 
+_CATEGORY_QUERIES = {
+    "主要": None,
+    "政治": "政治",
+    "経済": "経済",
+    "科学": "科学",
+    "エンタメ": "エンターテインメント",
+    "スポーツ": "スポーツ",
+}
+
+
+def _news_url(category: str) -> str:
+    q = _CATEGORY_QUERIES.get(category)
+    base = "https://news.google.com/rss"
+    if q:
+        return base + "/search?q=" + urllib.parse.quote(q) + "&hl=ja&gl=JP&ceid=JP:ja"
+    return base + "?hl=ja&gl=JP&ceid=JP:ja"
+
 
 def _strip_tags(text: str) -> str:
-    # Minimal HTML tag remover for RSS summaries.
     import re
     return re.sub(r"<[^>]+>", "", text or "").strip()
 
 
-def _fetch_news(limit: int = 12) -> list[dict]:
-    url = "https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja"
+def _fetch_news(category: str = "主要", limit: int = 12) -> list[dict]:
+    url = _news_url(category)
     req = urllib.request.Request(url, headers={
         "User-Agent": "liff-drawing-search/1.0 (news-proxy)",
         "Accept": "application/rss+xml, application/xml, text/xml",
@@ -1386,27 +1402,28 @@ def _fetch_news(limit: int = 12) -> list[dict]:
 
 
 @app.get("/api/news")
-def get_news(limit: int = 12) -> JSONResponse:
+def get_news(category: str = "主要", limit: int = 12) -> JSONResponse:
     global _NEWS_CACHE
     now = time.time()
+    cache_key = category + ":" + str(limit)
     with _NEWS_CACHE_LOCK:
-        entry = _NEWS_CACHE
-        if entry["items"] and (now - entry["ts"]) < _NEWS_TTL_SECONDS:
-            return JSONResponse(content={"cached": True, "items": entry["items"]})
+        entry = _NEWS_CACHE.get(cache_key)
+        if entry and entry["items"] and (now - entry["ts"]) < _NEWS_TTL_SECONDS:
+            return JSONResponse(content={"cached": True, "category": category, "items": entry["items"]})
     try:
-        items = _fetch_news(limit)
+        items = _fetch_news(category, limit)
     except Exception as exc:
         with _NEWS_CACHE_LOCK:
-            entry = _NEWS_CACHE
-            if entry["items"]:
+            entry = _NEWS_CACHE.get(cache_key)
+            if entry and entry["items"]:
                 return JSONResponse(content={
-                    "cached": True, "stale": True, "items": entry["items"],
+                    "cached": True, "stale": True, "category": category, "items": entry["items"],
                     "warning": str(exc),
                 })
         raise HTTPException(status_code=502, detail="news upstream unavailable: " + str(exc))
     with _NEWS_CACHE_LOCK:
-        _NEWS_CACHE = {"ts": now, "items": items}
-    return JSONResponse(content={"cached": False, "items": items})
+        _NEWS_CACHE[cache_key] = {"ts": now, "items": items}
+    return JSONResponse(content={"cached": False, "category": category, "items": items})
 
 
 @app.get("/admin.html")
