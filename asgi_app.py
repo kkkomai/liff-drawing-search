@@ -39,6 +39,7 @@ import sys
 import time
 import urllib.error
 import urllib.parse
+import xml.etree.ElementTree as ET
 import urllib.request
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -1344,6 +1345,68 @@ async def index() -> FileResponse:
 @app.get("/form.html")
 async def form() -> FileResponse:
     return FileResponse(BASE_DIR / "form.html", headers=_NO_CACHE)
+
+
+_NEWS_CACHE: dict[str, Any] = {"ts": 0.0, "items": []}
+_NEWS_CACHE_LOCK = _threading.Lock()
+_NEWS_TTL_SECONDS = 1800
+
+
+def _strip_tags(text: str) -> str:
+    # Minimal HTML tag remover for RSS summaries.
+    import re
+    return re.sub(r"<[^>]+>", "", text or "").strip()
+
+
+def _fetch_news(limit: int = 12) -> list[dict]:
+    url = "https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja"
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "liff-drawing-search/1.0 (news-proxy)",
+        "Accept": "application/rss+xml, application/xml, text/xml",
+    })
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        body = resp.read()
+    root = ET.fromstring(body)
+    items = []
+    for node in root.iter("item"):
+        title = _strip_tags(node.findtext("title") or "")
+        link = (node.findtext("link") or "").strip()
+        pubDate = (node.findtext("pubDate") or "").strip()
+        desc = _strip_tags(node.findtext("description") or "")
+        if title:
+            items.append({
+                "title": title,
+                "link": link,
+                "pubDate": pubDate,
+                "summary": desc[:280],
+            })
+        if len(items) >= limit:
+            break
+    return items
+
+
+@app.get("/api/news")
+def get_news(limit: int = 12) -> JSONResponse:
+    global _NEWS_CACHE
+    now = time.time()
+    with _NEWS_CACHE_LOCK:
+        entry = _NEWS_CACHE
+        if entry["items"] and (now - entry["ts"]) < _NEWS_TTL_SECONDS:
+            return JSONResponse(content={"cached": True, "items": entry["items"]})
+    try:
+        items = _fetch_news(limit)
+    except Exception as exc:
+        with _NEWS_CACHE_LOCK:
+            entry = _NEWS_CACHE
+            if entry["items"]:
+                return JSONResponse(content={
+                    "cached": True, "stale": True, "items": entry["items"],
+                    "warning": str(exc),
+                })
+        raise HTTPException(status_code=502, detail="news upstream unavailable: " + str(exc))
+    with _NEWS_CACHE_LOCK:
+        _NEWS_CACHE = {"ts": now, "items": items}
+    return JSONResponse(content={"cached": False, "items": items})
 
 
 @app.get("/admin.html")

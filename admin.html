@@ -116,6 +116,10 @@
   <main>
     <!-- 管理画面（LINE認証成功時のみ表示） -->
     <div id="app-view" style="display:none;">
+      <div class="card" id="news-card">
+        <h2>📰 本日の主要ニュース <button class="btn-ghost" onclick="loadNews()">更新</button></h2>
+        <div id="news-list" class="empty">読み込み中…</div>
+      </div>
       <div class="card">
         <h2>社員マスタ <span class="hint" id="emp-count"></span></h2>
         <div id="emp-error" class="banner banner-error" style="display:none;"></div>
@@ -431,7 +435,30 @@
       });
     }
 
+    function loadNews() {
+      var el = $('news-list');
+      if (el) el.innerHTML = '<div class="empty">読み込み中…</div>';
+      fetch('/api/news', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          var items = (j && j.items) || [];
+          if (!items.length) { if (el) el.innerHTML = '<div class="empty">ニュースがありません</div>'; return; }
+          var html = '';
+          items.forEach(function (it) {
+            html += '<div style="margin:0 0 12px;padding-bottom:10px;border-bottom:1px solid var(--border);">';
+            html += '<div style="font-size:14px;font-weight:600;line-height:1.4;"><a href="' + escHtml(it.link) + '" target="_blank" rel="noopener" style="color:var(--fg);text-decoration:none;">' + escHtml(it.title) + '</a></div>';
+            if (it.summary) html += '<div style="font-size:13px;color:var(--muted);margin-top:4px;">' + escHtml(it.summary) + '</div>';
+            if (it.pubDate) html += '<div style="font-size:11px;color:#94a3b8;margin-top:4px;">' + escHtml(it.pubDate) + '</div>';
+            html += '</div>';
+          });
+          if (el) el.innerHTML = html;
+        })
+        .catch(function (e) {
+          if (el) el.innerHTML = '<div class="banner banner-error">ニュース取得失敗: ' + escHtml(e.message || e) + '</div>';
+        });
+    }
+
     boot();
+    loadNews();
   </script>
-</body>
 </html>
