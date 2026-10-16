@@ -196,7 +196,6 @@
           <button class="btn-ghost news-cat" onclick="loadNews('エンタメ')">エンタメ</button>
           <button class="btn-ghost news-cat" onclick="loadNews('スポーツ')">スポーツ</button>
         </div>
-        <div id="news-note" style="display:none;font-size:13px;color:var(--muted);line-height:1.7;margin:0 0 12px;padding:10px 12px;border-left:3px solid #cbd5e1;background:#f8fafc;border-radius:4px;"></div>
         <div id="news-list" style="font-size:16px;line-height:1.7;">読み込み中…</div>
       </div>
     </div>
@@ -474,18 +473,10 @@
     }
 
     var currentNewsCategory = '主要';
-    var newsNotes = {
-      'エンタメ': 'ニュースにおける「エンタメ（エンターテインメント）」とは、政治・経済・社会事件などの硬派な報道とは異なり、人々に楽しみや気晴らし、感動を与える娯楽性の高い情報や記事のことです。\n\n主な対象ジャンル\n• 芸能・音楽：俳優、歌手の出演情報や結婚・出産、新曲リリースなど\n• 映画・ドラマ・舞台：新作の公開情報やレビュー、制作発表\n• アニメ・ゲーム・漫画：新作タイトルの発売、イベント、業界動向\n• お笑い・バラエティ：番組情報やライブ、賞レースの速報\n\n特徴\n• 目的の違い：政治や事件などの「報道（ニュース）」が社会課題の共有や問題提起を目的とするのに対し、エンタメニュースは受け手に「楽しさや息抜き」を提供することを主眼としています。'
-    };
 
     function loadNews(category) {
       category = category || currentNewsCategory;
       currentNewsCategory = category;
-      var note = $('news-note');
-      if (note) {
-        if (newsNotes[category]) { note.style.display = 'block'; note.textContent = newsNotes[category]; }
-        else { note.style.display = 'none'; note.textContent = ''; }
-      }
       $('news-list').innerHTML = '<div class="empty" style="font-size:16px;">読み込み中…</div>';
       var el = $('news-list');
       fetch('/api/news?category=' + encodeURIComponent(category), { cache: 'no-store' })
