@@ -116,11 +116,12 @@
   <main>
     <!-- 管理画面（LINE認証成功時のみ表示） -->
     <div id="app-view" style="display:none;">
-      <div class="card" id="news-card">
-        <h2>📰 本日の主要ニュース <button class="btn-ghost" onclick="loadNews()">更新</button></h2>
-        <div id="news-list" class="empty">読み込み中…</div>
+      <div class="tabbar" style="display:flex;gap:8px;margin-bottom:16px;">
+        <button class="btn-ghost" id="tabbtn-emp" onclick="showTab('emp')" style="flex:1;background:#e2e8f0;">社員管理</button>
+        <button class="btn-ghost" id="tabbtn-news" onclick="showTab('news')" style="flex:1;">本日のニュース</button>
       </div>
-      <div class="card">
+      <div id="tab-emp">
+        <div class="card">
         <h2>社員マスタ <span class="hint" id="emp-count"></span></h2>
         <div id="emp-error" class="banner banner-error" style="display:none;"></div>
         <div style="overflow-x:auto;">
@@ -182,6 +183,13 @@
         </form>
       </div>
     </div>
+    <div id="tab-news" style="display:none;">
+      <div class="card" id="news-card">
+        <h2 style="font-size:20px;">📰 本日の主要ニュース <button class="btn-ghost" onclick="loadNews()">更新</button></h2>
+        <div id="news-list" style="font-size:16px;line-height:1.7;">読み込み中…</div>
+      </div>
+    </div>
+  </div>
   </main>
 
   <div class="toast" id="toast"></div>
@@ -442,6 +450,18 @@
       });
     }
 
+    function showTab(name) {
+      var emp = $('tab-emp');
+      var news = $('tab-news');
+      var btnEmp = $('tabbtn-emp');
+      var btnNews = $('tabbtn-news');
+      if (emp) emp.style.display = name === 'emp' ? 'block' : 'none';
+      if (news) news.style.display = name === 'news' ? 'block' : 'none';
+      if (btnEmp) btnEmp.style.background = name === 'emp' ? '#e2e8f0' : '#fff';
+      if (btnNews) btnNews.style.background = name === 'news' ? '#e2e8f0' : '#fff';
+      if (name === 'news') loadNews();
+    }
+
     function loadNews() {
       var el = $('news-list');
       if (el) el.innerHTML = '<div class="empty">読み込み中…</div>';
@@ -453,8 +473,8 @@
           var html = '';
           items.forEach(function (it) {
             html += '<div style="margin:0 0 12px;padding-bottom:10px;border-bottom:1px solid var(--border);">';
-            html += '<div style="font-size:14px;font-weight:600;line-height:1.4;"><a href="' + escHtml(it.link) + '" target="_blank" rel="noopener" style="color:var(--fg);text-decoration:none;">' + escHtml(it.title) + '</a></div>';
-            if (it.summary) html += '<div style="font-size:13px;color:var(--muted);margin-top:4px;">' + escHtml(it.summary) + '</div>';
+            html += '<div style="font-size:18px;font-weight:600;line-height:1.4;"><a href="' + escHtml(it.link) + '" target="_blank" rel="noopener" style="color:var(--fg);text-decoration:none;">' + escHtml(it.title) + '</a></div>';
+            if (it.summary) html += '<div style="font-size:15px;color:var(--muted);margin-top:6px;line-height:1.6;">' + escHtml(it.summary) + '</div>';
             if (it.pubDate) html += '<div style="font-size:11px;color:#94a3b8;margin-top:4px;">' + escHtml(it.pubDate) + '</div>';
             html += '</div>';
           });
