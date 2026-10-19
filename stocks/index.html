@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>株価情報 - v20261019stocks</title>
+<script>window.__v="20261019stocks";</script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; padding: 12px; color: #0f172a; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .page-header h1 { font-size: 18px; color: #0f172a; }
+  .updated { font-size: 12px; color: #64748b; }
+  .btn-refresh { background: #00b900; color: #fff; border: none; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: bold; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .btn-refresh:disabled { background: #94a3b8; }
+  .stocks-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .stock-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; }
+  .stock-name { font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 2px; }
+  .stock-exchange { font-size: 11px; color: #64748b; margin-bottom: 8px; }
+  .stock-price { font-size: 22px; font-weight: 700; letter-spacing: 0.01em; }
+  .stock-change { font-size: 13px; font-weight: 700; margin-top: 4px; }
+  .stock-change .pct { font-size: 12px; margin-left: 4px; font-weight: 600; }
+  .up { color: #dc2626; }
+  .down { color: #2563eb; }
+  .flat { color: #64748b; }
+  .others-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stock-card.compact .stock-price { font-size: 18px; }
+  .stock-card.compact .stock-name { font-size: 13px; }
+  .loading { text-align: center; padding: 40px 8px; color: #64748b; font-size: 14px; }
+  .error-banner { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; white-space: pre-wrap; word-break: break-all; }
+  .note { font-size: 11px; color: #94a3b8; text-align: center; padding: 4px 0 12px; }
+  .section-label { font-size: 13px; font-weight: 700; color: #334155; margin: 0 0 8px; }
+</style>
+</head>
+<body>
+
+<div id="error-banner" class="error-banner" style="display:none;"></div>
+
+<div class="page-header">
+  <h1>📈 株価情報</h1>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span class="updated" id="updated-at">読み込み中...</span>
+    <button class="btn-refresh" id="refresh-btn">更新</button>
+  </div>
+</div>
+
+<div class="loading" id="loading">株価を取得中...</div>
+
+<div id="stocks-main" style="display:none;">
+  <p class="section-label">主要指数</p>
+  <div class="stocks-grid" id="stocks-grid"></div>
+
+  <p class="section-label" style="margin-top:4px;">その他</p>
+  <div class="others-grid" id="others-grid"></div>
+</div>
+
+<p class="note">株価は Yahoo Finance 経由の参考値（最大60秒キャッシュ）です。投資判断の責任はご自身でなさいますようお願いします。</p>
+
+<script>
+(function () {
+  'use strict';
+
+  var MAIN_SYMBOLS = ['^N225', '^GSPC', '^NSEI'];
+  var REFRESH_MS = 60000; // server cache TTL (STOCKS_CACHE_SECONDS default)
+
+  var state = { quotes: [], marketTime: null, timer: null };
+
+  function el(id) { return document.getElementById(id); }
+
+  // exchange 名などは外部（Yahoo）由来の文字列なので、innerHTML に
+  // 差し込む前に必ずエスケープする（自前のSTOCK_SYMBOLS由来の
+  // name も defensive に含める）。
+  function escHtml(s) {
+    return String(s == null ? '' : s).replace(/[<>&"']/g, function (c) {
+      return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function fmtPrice(q) {
+    var p = q.price;
+    if (p == null) return '--';
+    return p.toLocaleString('ja-JP', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+
+  function fmtSigned(v, digits) {
+    if (v == null) return '--';
+    var d = digits == null ? 2 : digits;
+    var s = v.toLocaleString('ja-JP', { minimumFractionDigits: d, maximumFractionDigits: d });
+    return (v > 0 ? '+' : '') + s;
+  }
+
+  function fmtTime(ts) {
+    if (ts == null) return '';
+    var dt = new Date(ts * 1000);
+    var wd = ['日', '月', '火', '水', '木', '金', '土'][dt.getDay()];
+    return (dt.getMonth() + 1) + '/' + dt.getDate() + ' (' + wd + ') ' +
+      String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
+  }
+
+  function changeParts(q) {
+    var cls = 'flat';
+    var arrow = '→';
+    var pct = q.change_percent;
+    if (q.change != null && q.change > 0) { cls = 'up'; arrow = '▲'; }
+    else if (q.change != null && q.change < 0) { cls = 'down'; arrow = '▼'; }
+    var pctText = (pct != null) ? ' (' + (pct > 0 ? '+' : '') + pct.toFixed(2) + '%)' : '';
+    return { cls: cls, arrow: arrow, pctText: pctText };
+  }
+
+  function stockCard(q, compact) {
+    var ch = changeParts(q);
+    var unit = q.symbol === '^N225' ? '円' : '';
+    return '<div class="stock-card' + (compact ? ' compact' : '') + '">' +
+      '<div class="stock-name">' + escHtml(q.name) + '</div>' +
+      '<div class="stock-exchange">' + escHtml(q.exchange || '--') + (q.currency ? ' / ' + escHtml(q.currency) : '') + '</div>' +
+      '<div class="stock-price">' + fmtPrice(q) + '<span style="font-size:13px;color:#64748b;"> ' + unit + '</span></div>' +
+      '<div class="stock-change ' + ch.cls + '">' + ch.arrow + ' ' +
+        fmtSigned(q.change) + '<span class="pct">' + ch.pctText + '</span></div>' +
+    '</div>';
+  }
+
+  function render() {
+    var bySymbol = {};
+    state.quotes.forEach(function (q) { bySymbol[q.symbol] = q; });
+    // The newest market_time across the basket is the as-of stamp.
+    state.quotes.forEach(function (q) {
+      if (q.market_time != null && (state.marketTime == null || q.market_time > state.marketTime)) {
+        state.marketTime = q.market_time;
+      }
+    });
+
+    var grid = el('stocks-grid');
+    var others = el('others-grid');
+    grid.innerHTML = '';
+    others.innerHTML = '';
+    MAIN_SYMBOLS.forEach(function (sym) {
+      var q = bySymbol[sym];
+      grid.insertAdjacentHTML('beforeend', q ? stockCard(q, false) : '');
+    });
+    Object.keys(bySymbol).forEach(function (sym) {
+      if (MAIN_SYMBOLS.indexOf(sym) === -1) {
+        others.insertAdjacentHTML('beforeend', stockCard(bySymbol[sym], true));
+      }
+    });
+
+    el('updated-at').textContent = state.marketTime != null ? fmtTime(state.marketTime) + ' 時点' : '';
+    el('loading').style.display = 'none';
+    el('stocks-main').style.display = '';
+  }
+
+  function showError(msg) {
+    var b = el('error-banner');
+    b.style.display = '';
+    b.textContent = '株価を取得できませんでした: ' + msg;
+  }
+  function clearError() { el('error-banner').style.display = 'none'; }
+
+  function loadStocks() {
+    var btn = el('refresh-btn');
+    btn.disabled = true;
+    btn.textContent = '取得中...';
+    fetch('/api/stocks', { cache: 'no-store' })
+      .then(function (r) {
+        return r.text().then(function (body) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + body.slice(0, 240));
+          return JSON.parse(body);
+        });
+      })
+      .then(function (data) {
+        if (!data || !Array.isArray(data.quotes) || !data.quotes.length) {
+          throw new Error('応答に株価データが含まれていません');
+        }
+        state.quotes = data.quotes;
+        clearError();
+        render();
+      })
+      .catch(function (e) {
+        showError(e.message || String(e));
+      })
+      .then(function () {
+        btn.disabled = false;
+        btn.textContent = '更新';
+      });
+  }
+
+  el('refresh-btn').addEventListener('click', loadStocks);
+  state.timer = setInterval(loadStocks, REFRESH_MS);
+  loadStocks();
+})();
+</script>
+</body>
+</html>

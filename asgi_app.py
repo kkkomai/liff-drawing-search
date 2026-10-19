@@ -290,6 +290,12 @@ def health() -> dict:
     payload["household_dir_listing"] = sorted(
         p.name for p in (BASE_DIR / "household").iterdir()
     ) if (BASE_DIR / "household").is_dir() else None
+    # Same probe for the stocks tab: its own 404 mode is the missing
+    # directory, and the iframe URL is the child the host hands over.
+    payload["stocks_dir_exists"] = (BASE_DIR / "stocks").is_dir()
+    payload["stocks_dir_listing"] = sorted(
+        p.name for p in (BASE_DIR / "stocks").iterdir()
+    ) if (BASE_DIR / "stocks").is_dir() else None
     # Report whether the ordering DB is actually reachable. /api/auth/login
     # returned a bare 500 with no body on Render while /health stayed green, so
     # "the app is mounted" was indistinguishable from "the database works".
@@ -613,6 +619,141 @@ def get_weather_forecast(lat: str, lng: str) -> JSONResponse:
             "forecast": forecast,
         },
         headers={"Cache-Control": "public, max-age=600"},
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Stock indices proxy (Yahoo Finance chart API, no API key).
+#
+# The 株価情報 tab shows 日経平均 / S&P 500 / Nifty 50 plus ダウ平均 and
+# NASDAQ総合. Yahoo's v8 chart endpoint serves every one of them
+# (query1.finance.yahoo.com, range=1d). A browser User-Agent is
+# REQUIRED — a bare urllib UA gets rate-limited with "Edge: Too Many
+# Requests" (429), and the v7 multi-symbol quote endpoint is
+# Unauthorized, so the basket is fetched symbol-by-symbol through the
+# chart API and cached as one payload.
+#
+# Same proxy contract as /api/weather: the client never knows the
+# upstream URL, the cache policy, or the symbol list. Public data —
+# not gated by the employees auth middleware, exactly like the weather
+# forecast. TTL defaults to 60s so quotes stay near-real-time without
+# hammering the upstream on every page view.
+# --------------------------------------------------------------------------- #
+
+STOCK_SYMBOLS: dict[str, dict[str, str]] = {
+    "^N225": {"name": "日経平均"},
+    "^GSPC": {"name": "S&P 500"},
+    "^NSEI": {"name": "Nifty 50"},
+    "^DJI": {"name": "ダウ平均"},
+    "^IXIC": {"name": "NASDAQ総合"},
+}
+
+_STOCKS_CACHE: dict[str, dict] = {}
+_STOCKS_CACHE_LOCK = _threading.Lock()
+
+
+def _stocks_cache_ttl_seconds() -> int:
+    return _parse_int(os.environ.get("STOCKS_CACHE_SECONDS", ""), 60)
+
+
+def _fetch_stock(symbol: str) -> dict:
+    """Hit the Yahoo chart API and return a normalised quote.
+
+    Raises ``urllib.error.URLError`` on network failure, ``TimeoutError``
+    on a slow upstream, ``json.JSONDecodeError`` on an upstream error
+    body (e.g. the 429 rate-limit page), and ``RuntimeError`` when the
+    response carries no usable price. The caller wraps all of these in
+    the stale-fallback / 502 paths.
+    """
+    url = (
+        "https://query1.finance.yahoo.com/v8/finance/chart/"
+        + urllib.parse.quote(symbol)
+        + "?range=1d&interval=5m"
+    )
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "liff-drawing-search/1.0 (stock-proxy)",
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        body = json.loads(resp.read().decode("utf-8"))
+    result = (body.get("chart") or {}).get("result") or []
+    if not result:
+        raise RuntimeError(f"no data for {symbol}")
+    meta = result[0].get("meta") or {}
+    price = meta.get("regularMarketPrice")
+    if price is None:
+        raise RuntimeError(f"no price for {symbol}")
+    previous_close = meta.get("chartPreviousClose")
+    change = meta.get("fulldayChange")
+    if change is None and price is not None and previous_close is not None:
+        change = round(price - previous_close, 4)
+    return {
+        "symbol": symbol,
+        "name": STOCK_SYMBOLS.get(symbol, {}).get("name", symbol),
+        "price": price,
+        "previous_close": previous_close,
+        "change": change,
+        "change_percent": meta.get("regularMarketChangePercent"),
+        "currency": meta.get("currency"),
+        "exchange": meta.get("exchangeName"),
+        "timezone": meta.get("timezone"),
+        "market_time": meta.get("regularMarketTime"),
+    }
+
+
+@app.get("/api/stocks")
+def get_stocks() -> JSONResponse:
+    """Return the major-index basket with near-real-time quotes.
+
+    One cache slot holds the whole basket, so all five symbols are
+    fetched at most once per cache window. On an upstream failure an
+    expired entry is served as a stale fallback (same contract as
+    /api/weather); with no entry at all the request 502s with the
+    upstream reason.
+    """
+    now = time.time()
+    ttl = _stocks_cache_ttl_seconds()
+    with _STOCKS_CACHE_LOCK:
+        entry = _STOCKS_CACHE.get("basket")
+    if entry and (now - entry["ts"]) < ttl:
+        return JSONResponse(
+            content={"cached": True, "cached_at": entry["ts"], "quotes": entry["data"]},
+            headers={"Cache-Control": "public, max-age=30"},
+        )
+    # Cache miss or expired. Fetch the whole basket (symbol by symbol —
+    # the multi-symbol quote endpoint is Unauthorized upstream) in
+    # PARALLEL: five sequential ~2s handshakes cost a ~10s first load,
+    # which reads as "broken" for a real-time tab. pool.map preserves
+    # the STOCK_SYMBOLS order, so the response shape is unchanged.
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            quotes = list(pool.map(_fetch_stock, STOCK_SYMBOLS))
+    except Exception as exc:
+        with _STOCKS_CACHE_LOCK:
+            entry = _STOCKS_CACHE.get("basket")
+        if entry:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "cached": True,
+                    "stale": True,
+                    "cached_at": entry["ts"],
+                    "quotes": entry["data"],
+                    "warning": "upstream unavailable, returning cached data: " + str(exc),
+                },
+                headers={"Cache-Control": "public, max-age=15"},
+            )
+        raise HTTPException(status_code=502, detail="stock upstream unavailable: " + str(exc))
+    with _STOCKS_CACHE_LOCK:
+        _STOCKS_CACHE["basket"] = {"ts": now, "data": quotes}
+    return JSONResponse(
+        content={"cached": False, "cached_at": now, "quotes": quotes},
+        headers={"Cache-Control": "public, max-age=30"},
     )
 
 
@@ -1327,6 +1468,9 @@ if (BASE_DIR / "bike").is_dir():
 
 if (BASE_DIR / "weather").is_dir():
     app.mount("/weather", StaticFiles(directory=str(BASE_DIR / "weather"), html=True), name="weather")
+
+if (BASE_DIR / "stocks").is_dir():
+    app.mount("/stocks", StaticFiles(directory=str(BASE_DIR / "stocks"), html=True), name="stocks")
 
 # 家計簿フロントエンド用。フロントエンド担当が household/ を作成するまで
 # 存在しない可能性があるため、bento/bike/weather と同じ条件付きマウントに
