@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#16a34a" />
   <title>社員管理 - 管理ページ</title>
+  <script>window.__v="20261019stocks";</script>
   <!-- liff_admin (LIFFアプリ) から開く場合に備えて LIFF SDK を読み込む。
        通常ブラウザから開いた場合は init が失敗しパスワード認証にフォールバック。 -->
   <script src="/sdk.js"></script>
@@ -87,6 +88,22 @@
     }
     .toast.show { opacity: 1; }
     .toast.error { background: var(--danger); }
+    /* 株価カード（株価タブ） */
+    .stock-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px; flex: 1; min-width: 0;
+    }
+    .stock-card.compact .stock-price { font-size: 18px; }
+    .stock-card.compact .stock-name { font-size: 13px; }
+    .stock-name { font-size: 14px; font-weight: 700; color: #334155; }
+    .stock-exchange { font-size: 11px; color: var(--muted); margin: 2px 0 8px; }
+    .stock-price { font-size: 22px; font-weight: 700; letter-spacing: 0.01em; }
+    .stock-change { font-size: 13px; font-weight: 700; margin-top: 4px; }
+    .stock-change .pct { font-size: 12px; margin-left: 4px; font-weight: 600; }
+    .stocks-row { display: flex; gap: 8px; }
+    .up { color: var(--danger); }
+    .down { color: #2563eb; }
+    .flat { color: #64748b; }
     .center-wrap { display: flex; align-items: center; justify-content: center; min-height: 70vh; }
     .login-card { width: 100%; max-width: 400px; }
     .logout-link { color: var(--accent-fg); font-size: 12px; cursor: pointer; text-decoration: underline; background: none; padding: 0; }
@@ -119,6 +136,7 @@
       <div class="tabbar" style="display:flex;gap:8px;margin-bottom:16px;">
         <button class="btn-ghost" id="tabbtn-emp" onclick="showTab('emp')" style="flex:1;background:#e2e8f0;">社員管理</button>
         <button class="btn-ghost" id="tabbtn-news" onclick="showTab('news')" style="flex:1;">本日のニュース</button>
+        <button class="btn-ghost" id="tabbtn-stocks" onclick="showTab('stocks')" style="flex:1;">株価</button>
       </div>
       <div id="tab-emp">
         <div class="card">
@@ -197,6 +215,21 @@
           <button class="btn-ghost news-cat" onclick="loadNews('スポーツ')">スポーツ</button>
         </div>
         <div id="news-list" style="font-size:16px;line-height:1.7;">読み込み中…</div>
+      </div>
+    </div>
+    <div id="tab-stocks" style="display:none;">
+      <div class="card">
+        <h2 style="font-size:20px;">📈 株価情報
+          <button class="btn-ghost" onclick="loadStocks()">更新</button>
+          <span class="hint" id="stocks-updated" style="float:right;margin-top:6px;"></span>
+        </h2>
+        <div id="stocks-error" class="banner banner-error" style="display:none;"></div>
+        <div id="stocks-loading" class="empty">読み込み中…</div>
+        <div id="stocks-grid" style="display:none;">
+          <div class="stocks-row" id="stocks-main"></div>
+          <div class="stocks-row" id="stocks-others" style="margin-top:8px;"></div>
+        </div>
+        <div class="hint" style="margin-top:10px;">株価は Yahoo Finance 経由の参考値（最大60秒キャッシュ）です。投資判断の責任はご自身でなさいますようお願いします。</div>
       </div>
     </div>
   </div>
@@ -463,13 +496,117 @@
     function showTab(name) {
       var emp = $('tab-emp');
       var news = $('tab-news');
+      var stocks = $('tab-stocks');
       var btnEmp = $('tabbtn-emp');
       var btnNews = $('tabbtn-news');
+      var btnStocks = $('tabbtn-stocks');
       if (emp) emp.style.display = name === 'emp' ? 'block' : 'none';
       if (news) news.style.display = name === 'news' ? 'block' : 'none';
+      if (stocks) stocks.style.display = name === 'stocks' ? 'block' : 'none';
       if (btnEmp) btnEmp.style.background = name === 'emp' ? '#e2e8f0' : '#fff';
       if (btnNews) btnNews.style.background = name === 'news' ? '#e2e8f0' : '#fff';
+      if (btnStocks) btnStocks.style.background = name === 'stocks' ? '#e2e8f0' : '#fff';
       if (name === 'news') loadNews();
+      if (name === 'stocks') {
+        loadStocks();
+        // 株価タブが表示されている間だけ60秒ごとに自動更新
+        // （他のタブではリクエストを節約）
+        if (stocksTimer) clearInterval(stocksTimer);
+        stocksTimer = setInterval(function () {
+          if ($('tab-stocks').style.display !== 'none') loadStocks();
+        }, 60000);
+      } else if (stocksTimer) {
+        clearInterval(stocksTimer);
+        stocksTimer = null;
+      }
+    }
+
+    var stocksTimer = null;
+
+    // ===== 株価 =====
+    // /api/stocks は認証ゲートの外（公開データ）。lineToken は不要。
+    function loadStocks() {
+      showBanner('stocks-error', '');
+      $('stocks-loading').style.display = '';
+      $('stocks-grid').style.display = 'none';
+      fetch('/api/stocks', { cache: 'no-store' })
+        .then(function (r) { return r.text().then(function (body) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + body.slice(0, 240));
+          return JSON.parse(body);
+        }); })
+        .then(function (j) {
+          var quotes = (j && j.quotes) || [];
+          if (!quotes.length) throw new Error('応答に株価データが含まれていません');
+          renderStocks(quotes);
+          var mt = null;
+          quotes.forEach(function (q) {
+            if (q.market_time != null && (mt == null || q.market_time > mt)) mt = q.market_time;
+          });
+          $('stocks-updated').textContent = mt != null ? '更新: ' + fmtMarketTime(mt) : '';
+          $('stocks-loading').style.display = 'none';
+          $('stocks-grid').style.display = '';
+        })
+        .catch(function (e) {
+          showBanner('stocks-error', '株価を取得できませんでした: ' + e.message);
+          $('stocks-loading').style.display = 'none';
+        });
+    }
+
+    function renderStocks(quotes) {
+      var bySymbol = {};
+      quotes.forEach(function (q) { bySymbol[q.symbol] = q; });
+      var MAIN = ['^N225', '^GSPC', '^NSEI'];
+      var mainHtml = '';
+      var othersHtml = '';
+      MAIN.forEach(function (sym) {
+        var q = bySymbol[sym];
+        if (q) mainHtml += stockCardHtml(q, false);
+      });
+      Object.keys(bySymbol).forEach(function (sym) {
+        if (MAIN.indexOf(sym) === -1 && bySymbol[sym]) othersHtml += stockCardHtml(bySymbol[sym], true);
+      });
+      $('stocks-main').innerHTML = mainHtml;
+      $('stocks-others').innerHTML = othersHtml;
+    }
+
+    function stockCardHtml(q, compact) {
+      var ch = changeParts(q);
+      var unit = q.symbol === '^N225' ? '円' : '';
+      return '<div class="stock-card' + (compact ? ' compact' : '') + '">' +
+        '<div class="stock-name">' + esc(q.name) + '</div>' +
+        '<div class="stock-exchange">' + esc(q.exchange || '--') + (q.currency ? ' / ' + esc(q.currency) : '') + '</div>' +
+        '<div class="stock-price">' + fmtPrice(q) + '<span style="font-size:13px;color:var(--muted);"> ' + unit + '</span></div>' +
+        '<div class="stock-change ' + ch.cls + '">' + ch.arrow + ' ' + fmtSigned(q.change) +
+        '<span class="pct">' + ch.pctText + '</span></div>' +
+      '</div>';
+    }
+
+    function changeParts(q) {
+      var cls = 'flat';
+      var arrow = '→';
+      if (q.change != null && q.change > 0) { cls = 'up'; arrow = '▲'; }
+      else if (q.change != null && q.change < 0) { cls = 'down'; arrow = '▼'; }
+      var pct = q.change_percent;
+      var pctText = (pct != null) ? ' (' + (pct > 0 ? '+' : '') + pct.toFixed(2) + '%)' : '';
+      return { cls: cls, arrow: arrow, pctText: pctText };
+    }
+
+    function fmtPrice(q) {
+      var p = q.price;
+      if (p == null) return '--';
+      return p.toLocaleString('ja-JP', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    }
+
+    function fmtSigned(v) {
+      if (v == null) return '--';
+      return (v > 0 ? '+' : '') + v.toLocaleString('ja-JP', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    }
+
+    function fmtMarketTime(ts) {
+      var dt = new Date(ts * 1000);
+      var wd = ['日', '月', '火', '水', '木', '金', '土'][dt.getDay()];
+      return (dt.getMonth() + 1) + '/' + dt.getDate() + '(' + wd + ') ' +
+        String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
     }
 
     var currentNewsCategory = '主要';
