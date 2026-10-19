@@ -6,8 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>申請フォーム - v20261019stocks</title>
-  <script>window.__v="20261019stocks";</script>
+  <title>申請フォーム - v20261019rmstocks</title>
+  <script>window.__v="20261019rmstocks";</script>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/manifest-icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -314,7 +314,6 @@
       <button id="tab-bike-btn" class="tab" data-tab="bike" ontouchstart="switchTab('bike')" onclick="switchTab('bike')">自転車</button>
       <button id="tab-household-btn" class="tab" data-tab="household" ontouchstart="switchTab('household')" onclick="switchTab('household')">家計簿</button>
       <button id="tab-weather-btn" class="tab" data-tab="weather" ontouchstart="switchTab('weather')" onclick="switchTab('weather')">天気</button>
-      <button id="tab-stocks-btn" class="tab" data-tab="stocks" ontouchstart="switchTab('stocks')" onclick="switchTab('stocks')">株価</button>
     </div>
 
   <div class="tab-content active" id="tab-overtime">
@@ -460,14 +459,7 @@
     </div>
   </div>
 
-  <div class="tab-content" id="tab-stocks">
-    <!-- 株価情報タブ。公開データ（/api/stocks は認証ゲートの外）のため
-         postMessage  credential 配布不要・自己完結の iframe。
-         固定ピクセル高: LINE WebView では vh 計算が潰れる。 -->
-    <iframe id="stocks-frame" title="株価情報"
-            style="width:100%;height:660px;min-height:660px;border:0;display:block;background:#f5f6f8;"
-            data-src="stocks/index.html?embedded=1&v=1"></iframe>
-  </div>
+
 
   <div class="editor-overlay" id="editor-overlay" style="display:none !important;">
     <div class="editor-header">
@@ -529,7 +521,6 @@
           loadWeatherTab();
         }
       }
-      if (tabName === 'stocks') ensureStocksFrame();
       if (tabName === 'paid' && typeof loadPaidHistories === 'function') {
         try { loadPaidHistories(); } catch (e) { log('loadPaidHistories failed: ' + e.message, true); }
       }
@@ -1087,20 +1078,6 @@
         log('ensureBikeFrame: loading ' + frame.src);
       }
       sendBikeCredentials();
-    }
-
-    // 株価タブは公開データのみ（/api/stocks は認証ゲートの外）なので
-    // postMessage の credential 配布は不要。iframe を遅延ロードするだけ。
-    // data-src の &v= は子ページの変更ごとに bump する（ホストの
-    // バージョン bump では iframe のキャッシュは破れない）。
-    function ensureStocksFrame() {
-      var frame = document.getElementById('stocks-frame');
-      if (!frame) return;
-      if (frame.dataset.loaded !== '1') {
-        frame.src = frame.dataset.src;
-        frame.dataset.loaded = '1';
-        log('ensureStocksFrame: loading ' + frame.src);
-      }
     }
 
     function sendBikeCredentials() {
