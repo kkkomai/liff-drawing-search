@@ -88,22 +88,27 @@
     }
     .toast.show { opacity: 1; }
     .toast.error { background: var(--danger); }
-    /* 株価カード（株価タブ） */
-    .stock-card {
+    /* 株価タブ: 1指数1行のカード */
+    .stock-row {
       background: var(--card); border: 1px solid var(--border);
-      border-radius: 10px; padding: 12px; flex: 1; min-width: 0;
+      border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 12px;
     }
-    .stock-card.compact .stock-price { font-size: 18px; }
-    .stock-card.compact .stock-name { font-size: 13px; }
-    .stock-name { font-size: 14px; font-weight: 700; color: #334155; }
-    .stock-exchange { font-size: 11px; color: var(--muted); margin: 2px 0 8px; }
-    .stock-price { font-size: 22px; font-weight: 700; letter-spacing: 0.01em; }
-    .stock-change { font-size: 13px; font-weight: 700; margin-top: 4px; }
-    .stock-change .pct { font-size: 12px; margin-left: 4px; font-weight: 600; }
-    .stocks-row { display: flex; gap: 8px; }
+    .stock-row .stock-name { font-size: 15px; font-weight: 700; color: #334155; min-width: 88px; }
+    .stock-row .stock-exchange { font-size: 11px; color: var(--muted); min-width: 64px; }
+    .stock-row .stock-price { font-size: 20px; font-weight: 700; flex: 1; text-align: right; }
+    .stock-row .stock-change { font-size: 14px; font-weight: 700; min-width: 160px; text-align: right; }
+    .stock-row .stock-change .pct { font-size: 12px; margin-left: 4px; font-weight: 600; }
+    .stock-section { font-size: 13px; font-weight: 700; color: #334155; margin: 14px 0 8px; }
     .up { color: var(--danger); }
     .down { color: #2563eb; }
     .flat { color: #64748b; }
+    /* 経済ニュース */
+    .news-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .news-item:last-child { border-bottom: none; }
+    .news-item a { color: var(--fg); text-decoration: none; font-size: 15px; font-weight: 600; line-height: 1.45; }
+    .news-item .news-summary { font-size: 13px; color: var(--muted); margin-top: 4px; line-height: 1.6; }
+    .news-item .news-date { font-size: 11px; color: #94a3b8; margin-top: 2px; }
     .center-wrap { display: flex; align-items: center; justify-content: center; min-height: 70vh; }
     .login-card { width: 100%; max-width: 400px; }
     .logout-link { color: var(--accent-fg); font-size: 12px; cursor: pointer; text-decoration: underline; background: none; padding: 0; }
@@ -226,10 +231,20 @@
         <div id="stocks-error" class="banner banner-error" style="display:none;"></div>
         <div id="stocks-loading" class="empty">読み込み中…</div>
         <div id="stocks-grid" style="display:none;">
-          <div class="stocks-row" id="stocks-main"></div>
-          <div class="stocks-row" id="stocks-others" style="margin-top:8px;"></div>
+          <div class="stock-section" id="stocks-main-label">主要指数</div>
+          <div id="stocks-main"></div>
+          <div class="stock-section" id="stocks-others-label">その他の指数</div>
+          <div id="stocks-others"></div>
         </div>
         <div class="hint" style="margin-top:10px;">株価は Yahoo Finance 経由の参考値（最大60秒キャッシュ）です。投資判断の責任はご自身でなさいますようお願いします。</div>
+      </div>
+      <div class="card">
+        <h2 style="font-size:20px;">📰 経済ニュース
+          <button class="btn-ghost" onclick="loadStocksNews()">更新</button>
+        </h2>
+        <div id="stocks-news-error" class="banner banner-error" style="display:none;"></div>
+        <div id="stocks-news-loading" class="empty">読み込み中…</div>
+        <div id="stocks-news-list" style="display:none;"></div>
       </div>
     </div>
   </div>
@@ -509,6 +524,7 @@
       if (name === 'news') loadNews();
       if (name === 'stocks') {
         loadStocks();
+        loadStocksNews();
         // 株価タブが表示されている間だけ60秒ごとに自動更新
         // （他のタブではリクエストを節約）
         if (stocksTimer) clearInterval(stocksTimer);
@@ -560,25 +576,65 @@
       var othersHtml = '';
       MAIN.forEach(function (sym) {
         var q = bySymbol[sym];
-        if (q) mainHtml += stockCardHtml(q, false);
+        if (q) mainHtml += stockRowHtml(q, false);
       });
       Object.keys(bySymbol).forEach(function (sym) {
-        if (MAIN.indexOf(sym) === -1 && bySymbol[sym]) othersHtml += stockCardHtml(bySymbol[sym], true);
+        if (MAIN.indexOf(sym) === -1 && bySymbol[sym]) othersHtml += stockRowHtml(bySymbol[sym], true);
       });
       $('stocks-main').innerHTML = mainHtml;
       $('stocks-others').innerHTML = othersHtml;
     }
 
-    function stockCardHtml(q, compact) {
+    // 1指数1行: 名前 | 取引所 | 価格 | 騰落 を横に並べる
+    function stockRowHtml(q, compact) {
       var ch = changeParts(q);
       var unit = q.symbol === '^N225' ? '円' : '';
-      return '<div class="stock-card' + (compact ? ' compact' : '') + '">' +
+      return '<div class="stock-row">' +
         '<div class="stock-name">' + esc(q.name) + '</div>' +
-        '<div class="stock-exchange">' + esc(q.exchange || '--') + (q.currency ? ' / ' + esc(q.currency) : '') + '</div>' +
-        '<div class="stock-price">' + fmtPrice(q) + '<span style="font-size:13px;color:var(--muted);"> ' + unit + '</span></div>' +
+        '<div class="stock-exchange">' + esc(q.exchange || '--') + (q.currency ? ' ' + esc(q.currency) : '') + '</div>' +
+        '<div class="stock-price">' + fmtPrice(q) + '<span style="font-size:12px;color:var(--muted);"> ' + unit + '</span></div>' +
         '<div class="stock-change ' + ch.cls + '">' + ch.arrow + ' ' + fmtSigned(q.change) +
         '<span class="pct">' + ch.pctText + '</span></div>' +
       '</div>';
+    }
+
+    // 経済ニュース（/api/news の「経済」カテゴリ = 株・市場関連）
+    function loadStocksNews() {
+      showBanner('stocks-news-error', '');
+      $('stocks-news-loading').style.display = '';
+      $('stocks-news-list').style.display = 'none';
+      fetch('/api/news?category=' + encodeURIComponent('経済'), { cache: 'no-store' })
+        .then(function (r) { return r.text().then(function (body) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + body.slice(0, 240));
+          return JSON.parse(body);
+        }); })
+        .then(function (j) {
+          var items = (j && j.items) || [];
+          var list = $('stocks-news-list');
+          if (!items.length) {
+            list.innerHTML = '<div class="empty">ニュースがありません</div>';
+          } else {
+            var html = '';
+            items.slice(0, 6).forEach(function (it) {
+              html += '<div class="news-item">';
+              if (it.link) {
+                html += '<a href="' + esc(it.link) + '" target="_blank" rel="noopener">' + esc(it.title) + '</a>';
+              } else {
+                html += '<div style="font-size:15px;font-weight:600;line-height:1.45;">' + esc(it.title) + '</div>';
+              }
+              if (it.summary) html += '<div class="news-summary">' + esc(it.summary) + '</div>';
+              if (it.pubDate) html += '<div class="news-date">' + esc(it.pubDate) + '</div>';
+              html += '</div>';
+            });
+            list.innerHTML = html;
+          }
+          $('stocks-news-loading').style.display = 'none';
+          list.style.display = '';
+        })
+        .catch(function (e) {
+          showBanner('stocks-news-error', 'ニュースを取得できませんでした: ' + e.message);
+          $('stocks-news-loading').style.display = 'none';
+        });
     }
 
     function changeParts(q) {

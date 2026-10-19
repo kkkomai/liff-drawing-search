@@ -646,6 +646,13 @@ STOCK_SYMBOLS: dict[str, dict[str, str]] = {
     "^NSEI": {"name": "Nifty 50"},
     "^DJI": {"name": "ダウ平均"},
     "^IXIC": {"name": "NASDAQ総合"},
+    "^FTSE": {"name": "FTSE 100"},
+    "^GDAXI": {"name": "DAX"},
+    "^FCHI": {"name": "CAC 40"},
+    "^HSI": {"name": "ハンセン"},
+    "^KS11": {"name": "KOSPI"},
+    "000001.SS": {"name": "上海総合"},
+    "BTC-USD": {"name": "ビットコイン"},
 }
 
 _STOCKS_CACHE: dict[str, dict] = {}
