@@ -659,49 +659,71 @@ def _stocks_cache_ttl_seconds() -> int:
 def _fetch_stock(symbol: str) -> dict:
     """Hit the Yahoo chart API and return a normalised quote.
 
-    Raises ``urllib.error.URLError`` on network failure, ``TimeoutError``
-    on a slow upstream, ``json.JSONDecodeError`` on an upstream error
-    body (e.g. the 429 rate-limit page), and ``RuntimeError`` when the
-    response carries no usable price. The caller wraps all of these in
-    the stale-fallback / 502 paths.
+    Yahoo rate-limits by IP: the Render instance's shared egress IP gets
+    ``429 Too Many Requests`` under burst (five parallel symbol fetches,
+    or a cold cache right after a deploy). A 429 (or a non-JSON
+    rate-limit page) is therefore retried with a short backoff inside
+    this function — the basket fetch in get_stocks() stays simple and
+    the stale fallback remains the last resort.
     """
     url = (
         "https://query1.finance.yahoo.com/v8/finance/chart/"
         + urllib.parse.quote(symbol)
         + "?range=1d&interval=5m"
     )
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "liff-drawing-search/1.0 (stock-proxy)",
-            "Accept": "application/json",
-        },
+    last_http_status: int | None = None
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": "liff-drawing-search/1.0 (stock-proxy)",
+                    "Accept": "application/json",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            result = (body.get("chart") or {}).get("result") or []
+            if not result:
+                raise RuntimeError(f"no data for {symbol}")
+            meta = result[0].get("meta") or {}
+            price = meta.get("regularMarketPrice")
+            if price is None:
+                raise RuntimeError(f"no price for {symbol}")
+            previous_close = meta.get("chartPreviousClose")
+            change = meta.get("fulldayChange")
+            if change is None and price is not None and previous_close is not None:
+                change = round(price - previous_close, 4)
+            return {
+                "symbol": symbol,
+                "name": STOCK_SYMBOLS.get(symbol, {}).get("name", symbol),
+                "price": price,
+                "previous_close": previous_close,
+                "change": change,
+                "change_percent": meta.get("regularMarketChangePercent"),
+                "currency": meta.get("currency"),
+                "exchange": meta.get("exchangeName"),
+                "timezone": meta.get("timezone"),
+                "market_time": meta.get("regularMarketTime"),
+            }
+        except urllib.error.HTTPError as exc:
+            last_http_status = exc.code
+            # 429 (and 503, which Yahoo also uses when throttling) are
+            # transient on a shared egress IP — back off and retry.
+            if exc.code in (429, 503) and attempt < 2:
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            # The rate-limit response is an HTML/plaintext error page,
+            # which fails JSON parsing. Same transient treatment.
+            if attempt < 2:
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise
+    raise RuntimeError(
+        f"fetch failed for {symbol} after retries (last HTTP {last_http_status})"
     )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        body = json.loads(resp.read().decode("utf-8"))
-    result = (body.get("chart") or {}).get("result") or []
-    if not result:
-        raise RuntimeError(f"no data for {symbol}")
-    meta = result[0].get("meta") or {}
-    price = meta.get("regularMarketPrice")
-    if price is None:
-        raise RuntimeError(f"no price for {symbol}")
-    previous_close = meta.get("chartPreviousClose")
-    change = meta.get("fulldayChange")
-    if change is None and price is not None and previous_close is not None:
-        change = round(price - previous_close, 4)
-    return {
-        "symbol": symbol,
-        "name": STOCK_SYMBOLS.get(symbol, {}).get("name", symbol),
-        "price": price,
-        "previous_close": previous_close,
-        "change": change,
-        "change_percent": meta.get("regularMarketChangePercent"),
-        "currency": meta.get("currency"),
-        "exchange": meta.get("exchangeName"),
-        "timezone": meta.get("timezone"),
-        "market_time": meta.get("regularMarketTime"),
-    }
 
 
 @app.get("/api/stocks")
