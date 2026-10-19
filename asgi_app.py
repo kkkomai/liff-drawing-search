@@ -660,26 +660,40 @@ def _fetch_stock(symbol: str) -> dict:
     """Hit the Yahoo chart API and return a normalised quote.
 
     Yahoo rate-limits by IP: the Render instance's shared egress IP gets
-    ``429 Too Many Requests`` under burst (five parallel symbol fetches,
-    or a cold cache right after a deploy). A 429 (or a non-JSON
-    rate-limit page) is therefore retried with a short backoff inside
-    this function — the basket fetch in get_stocks() stays simple and
-    the stale fallback remains the last resort.
+    ``429 Too Many Requests`` persistently (other tenants on the same IP
+    hammer Yahoo). Defences, in order:
+
+    1. Alternate ``query1`` / ``query2`` across attempts — they sit on
+       separate rate-limit buckets.
+    2. A browser-like User-Agent — the custom UA looks like a bot and
+       is limited harder.
+    3. Backoff between attempts (3s/3s/6s, well under Render's request
+       timeout).
+    4. The caller (get_stocks) serves the stale cache when every
+       attempt fails, so a rate-limited window still shows the last
+       known prices with a warning instead of an error.
     """
-    url = (
-        "https://query1.finance.yahoo.com/v8/finance/chart/"
-        + urllib.parse.quote(symbol)
-        + "?range=1d&interval=5m"
+    hosts = (
+        "https://query1.finance.yahoo.com",
+        "https://query2.finance.yahoo.com",
+    )
+    ua = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/126.0 Safari/537.36"
     )
     last_http_status: int | None = None
-    for attempt in range(3):
+    for attempt in range(4):
+        base = hosts[attempt % 2]
+        url = (
+            base + "/v8/finance/chart/"
+            + urllib.parse.quote(symbol)
+            + "?range=1d&interval=5m"
+        )
         try:
             req = urllib.request.Request(
                 url,
-                headers={
-                    "User-Agent": "liff-drawing-search/1.0 (stock-proxy)",
-                    "Accept": "application/json",
-                },
+                headers={"User-Agent": ua, "Accept": "application/json"},
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
@@ -709,16 +723,17 @@ def _fetch_stock(symbol: str) -> dict:
         except urllib.error.HTTPError as exc:
             last_http_status = exc.code
             # 429 (and 503, which Yahoo also uses when throttling) are
-            # transient on a shared egress IP — back off and retry.
-            if exc.code in (429, 503) and attempt < 2:
-                time.sleep(2 * (attempt + 1))
+            # transient on a shared egress IP — back off and retry on the
+            # other host.
+            if exc.code in (429, 503) and attempt < 3:
+                time.sleep(3 * (attempt // 2 + 1))
                 continue
             raise
         except (json.JSONDecodeError, UnicodeDecodeError):
             # The rate-limit response is an HTML/plaintext error page,
             # which fails JSON parsing. Same transient treatment.
-            if attempt < 2:
-                time.sleep(2 * (attempt + 1))
+            if attempt < 3:
+                time.sleep(3 * (attempt // 2 + 1))
                 continue
             raise
     raise RuntimeError(
